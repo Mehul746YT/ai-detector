@@ -10,9 +10,14 @@ Supports:
 """
 
 import dataclasses
+import os
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
+
+# Explicitly resolve template and static folders relative to project root
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
 
 from detector.text_detector import analyze_text
 from detector.image_detector import analyze_image
@@ -21,7 +26,7 @@ from detector.document_detector import analyze_document
 from detector.code_detector import analyze_code
 from detector.video_detector import analyze_video
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder=TEMPLATES_DIR)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB upload limit
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".heic"}
@@ -35,8 +40,11 @@ def _serialize(obj):
     return dataclasses.asdict(obj)
 
 
-@app.route("/")
-def index():
+@app.route("/", defaults={"path": ""})
+@app.route("/<path:path>")
+def catch_all(path):
+    if path.startswith("analyze/"):
+        return jsonify({"error": "Method Not Allowed"}), 405
     return render_template("index.html")
 
 
@@ -98,7 +106,6 @@ def analyze_media_route():
         return jsonify({"media_type": "code", "result": _serialize(result)})
 
     else:
-        # Fallback inspection: attempt image or document
         try:
             result = analyze_image(file_bytes, filename)
             return jsonify({"media_type": "image", "result": _serialize(result)})
