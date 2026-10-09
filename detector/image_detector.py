@@ -1,34 +1,35 @@
 """
-Image AI Detection Module
-Uses:
-  1. ViT classifier (umm-maybe/AI-image-detector)
-  2. High-frequency noise residual analysis (real sensors create micro-texture)
-  3. EXIF & PNG metadata forensic parsing
-  4. Dynamic local variance uniformity
-  5. RGB inter-channel noise correlation
+Image AI Detection Module (Vercel Serverless Ready)
+Architecture:
+  - Free Serverless Cloud Vision Transformer (ViT) via Hugging Face Inference API
+  - Forensic EXIF and PNG chunk parsing for generative parameters (SD, Midjourney, DALL-E, CFG scale)
+  - Pure NumPy/Pillow optical residual and spatial variance checks (no PyTorch required)
 """
 
 import io
 from dataclasses import dataclass, field
 from typing import Optional
 
+import requests
 import numpy as np
-import torch
 from PIL import Image, ExifTags, ImageFilter
-from transformers import pipeline
-
-_img_classifier = None
 
 
-def _load_img_classifier():
-    global _img_classifier
-    if _img_classifier is None:
-        _img_classifier = pipeline(
-            "image-classification",
-            model="umm-maybe/AI-image-detector",
-            device=0 if torch.cuda.is_available() else -1,
-        )
-    return _img_classifier
+@dataclass
+class ImageSignal:
+    name: str
+    ai_score: float
+    weight: float
+    label: str
+
+
+@dataclass
+class ImageResult:
+    final_score: float
+    verdict: str
+    filename: str
+    signals: list = field(default_factory=list)
+    error: Optional[str] = None
 
 
 _AI_SOFTWARE_PATTERNS = [
@@ -43,6 +44,28 @@ _CAMERA_PATTERNS = [
     "leica", "hasselblad", "dji", "apple", "samsung", "google",
     "huawei", "xiaomi", "oneplus",
 ]
+
+
+def query_hf_vit_api(image_bytes: bytes) -> Optional[dict]:
+    """Queries Hugging Face serverless vision model (umm-maybe/AI-image-detector)."""
+    try:
+        url = "https://api-inference.huggingface.co/models/umm-maybe/AI-image-detector"
+        resp = requests.post(url, data=image_bytes, timeout=8)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0:
+                for item in data:
+                    lbl = str(item.get("label", "")).lower()
+                    score = float(item.get("score", 0.5))
+                    if any(k in lbl for k in ("artificial", "ai", "fake", "generated")):
+                        return {"ai_score": score, "label": f'Vision model: "{item.get("label")}" ({score:.1%})'}
+                    elif any(k in lbl for k in ("human", "real", "natural")):
+                        return {"ai_score": 1.0 - score, "label": f'Vision model: "{item.get("label")}" ({score:.1%})'}
+                first = data[0]
+                return {"ai_score": float(first.get("score", 0.5)), "label": f'Top label: {first.get("label")}'}
+    except Exception:
+        pass
+    return None
 
 
 def analyze_exif(img: Image.Image) -> dict:
@@ -76,7 +99,6 @@ def analyze_exif(img: Image.Image) -> dict:
     if exif_data:
         result["has_exif"] = True
         tag_map = {v: k for k, v in ExifTags.TAGS.items()}
-
         make = str(exif_data.get(tag_map.get("Make", 271), ""))
         model_tag = str(exif_data.get(tag_map.get("Model", 272), ""))
         software = str(exif_data.get(tag_map.get("Software", 305), ""))
@@ -107,7 +129,6 @@ def analyze_exif(img: Image.Image) -> dict:
         result["ai_score"] = 0.40
         result["label"] = "Standard digital EXIF record (non-AI)"
     else:
-        # Absence of EXIF is neutral/slightly ambiguous, not decisive
         result["ai_score"] = 0.50
         result["label"] = "Metadata stripped (typical for web/social uploads)"
 
@@ -120,17 +141,11 @@ def _to_gray_array(img: Image.Image, size: int = 256) -> np.ndarray:
 
 
 def noise_residual_analysis(img: Image.Image) -> dict:
-    """
-    Real photos exhibit uniform, high-frequency sensor noise across smooth surfaces.
-    Diffusion models exhibit distinct spatial variance and denoising artifacts.
-    """
     gray = _to_gray_array(img, size=256)
     blurred = np.array(img.convert("L").resize((256, 256), Image.LANCZOS).filter(ImageFilter.GaussianBlur(1.2)), dtype=float)
     residual = gray - blurred
     res_std = float(residual.std())
 
-    # Real photos typically have moderate subtle residuals (3-10).
-    # Synthesized images often have unnaturally smooth flat areas or heavy denoising anomalies (>12 or <2).
     if res_std > 11.0:
         score = min(0.95, 0.5 + (res_std - 11.0) * 0.05)
         label = f"High residual noise variance ({res_std:.1f}) — typical diffusion artifacts"
@@ -156,8 +171,6 @@ def local_variance_distribution(gray: np.ndarray) -> dict:
     variances = np.array(variances)
     mean_var = variances.mean()
     cv = float(variances.std() / (mean_var + 1e-5))
-
-    # Real photos have broad variance distribution across textures
     ai_score = float(np.clip(1.0 - cv * 0.5, 0.1, 0.9))
     label = f"Texture variance CV={cv:.2f} ({'uniform/synthetic pattern' if cv < 1.0 else 'natural textural diversity'})"
     return {"ai_score": ai_score, "label": label, "cv": cv}
@@ -181,27 +194,9 @@ def color_channel_correlation(img: Image.Image) -> dict:
     if np.isnan(avg_corr):
         return {"ai_score": 0.5, "label": "Normal color spectrum", "avg_corr": 0.8}
 
-    # Extremely high color channel alignment often suggests synthetic rendering
     ai_score = float(np.clip((avg_corr - 0.70) / 0.28, 0.1, 0.95))
     label = f"RGB correlation={avg_corr:.2f} ({'high synthetic channel harmony' if avg_corr > 0.92 else 'natural multi-spectral variation'})"
     return {"ai_score": ai_score, "label": label, "avg_corr": avg_corr}
-
-
-@dataclass
-class ImageSignal:
-    name: str
-    ai_score: float
-    weight: float
-    label: str
-
-
-@dataclass
-class ImageResult:
-    final_score: float
-    verdict: str
-    filename: str
-    signals: list = field(default_factory=list)
-    error: Optional[str] = None
 
 
 def analyze_image(image_bytes: bytes, filename: str) -> ImageResult:
@@ -213,35 +208,17 @@ def analyze_image(image_bytes: bytes, filename: str) -> ImageResult:
 
     signals: list[ImageSignal] = []
 
-    # 1. ViT Vision Transformer classifier
-    vit_score = None
-    try:
-        clf = _load_img_classifier()
-        results = clf(img)
-        # Model labels: 0: 'artificial', 1: 'human'
-        for r in results:
-            lbl = r["label"].lower()
-            if any(k in lbl for k in ("artificial", "ai", "fake", "generated")):
-                vit_score = float(r["score"])
-                break
-            elif any(k in lbl for k in ("human", "real", "natural")):
-                vit_score = float(1.0 - r["score"])
-                break
-        if vit_score is None:
-            vit_score = float(results[0]["score"])
-
-        top_lbl = results[0]["label"]
-        top_conf = results[0]["score"]
+    # 1. Cloud Vision Transformer via free Serverless API
+    vit_res = query_hf_vit_api(image_bytes)
+    if vit_res is not None:
         signals.append(ImageSignal(
-            name="Vision Transformer (ViT) Classifier",
-            ai_score=round(vit_score, 4),
+            name="Cloud Vision Transformer (ViT)",
+            ai_score=round(vit_res["ai_score"], 4),
             weight=4.0,
-            label=f'Model verdict: "{top_lbl}" ({top_conf:.1%} confidence)'
+            label=vit_res["label"]
         ))
-    except Exception as e:
-        print(f"[vit] {e}")
 
-    # 2. Forensic Metadata Analysis
+    # 2. Metadata Forensics
     exif = analyze_exif(img)
     exif_weight = 10.0 if (exif["ai_score"] > 0.95 or exif["ai_score"] < 0.1) else 2.0
     signals.append(ImageSignal(
@@ -251,12 +228,12 @@ def analyze_image(image_bytes: bytes, filename: str) -> ImageResult:
         label=exif["label"]
     ))
 
-    # 3. High-Frequency Optical Residuals
+    # 3. Optical Residuals
     residual = noise_residual_analysis(img)
     signals.append(ImageSignal(
         name="High-Frequency Sensor Residuals",
         ai_score=round(residual["ai_score"], 4),
-        weight=2.5,
+        weight=3.0,
         label=residual["label"]
     ))
 
@@ -266,16 +243,16 @@ def analyze_image(image_bytes: bytes, filename: str) -> ImageResult:
     signals.append(ImageSignal(
         name="Spatial Texture Distribution",
         ai_score=round(variance_res["ai_score"], 4),
-        weight=1.5,
+        weight=2.0,
         label=variance_res["label"]
     ))
 
-    # 5. Color Channel Correlation
+    # 5. Channel Correlation
     corr = color_channel_correlation(img)
     signals.append(ImageSignal(
         name="Spectral Channel Correlation",
         ai_score=round(corr["ai_score"], 4),
-        weight=1.2,
+        weight=1.5,
         label=corr["label"]
     ))
 
