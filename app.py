@@ -1,25 +1,39 @@
-"""AI Detector — Flask Web Application"""
+"""
+AI Detector — Unified Universal Multi-Media Detection Engine (Dutton & Co.)
+Supports:
+  - Text & Essays (ChatGPT, Claude, Gemini, Llama, Copilot)
+  - Images (Midjourney, Stable Diffusion, DALL-E, Flux, Ideogram, Firefly)
+  - Source Code (Copilot, Cursor, CodeLlama, ChatGPT)
+  - Audio & Voice Clones (ElevenLabs, Bark, RVC, Suno, Udio)
+  - Videos & Deepfakes (Sora, Runway Gen-2/3, Pika, Kling, Luma)
+  - Documents & Reports (PDF, Word DOCX, TXT)
+"""
 
 import dataclasses
-import json
-import os
 from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
+from detector.text_detector import analyze_text
+from detector.image_detector import analyze_image
+from detector.audio_detector import analyze_audio
+from detector.document_detector import analyze_document
+from detector.code_detector import analyze_code
+from detector.video_detector import analyze_video
+
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 32 * 1024 * 1024  # 32 MB max upload
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB upload limit
 
-ALLOWED_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".heic"}
-
-
-def _result_to_dict(result) -> dict:
-    """Convert dataclass result to JSON-serialisable dict."""
-    d = dataclasses.asdict(result)
-    return d
+IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".heic"}
+AUDIO_EXTS = {".wav", ".mp3", ".ogg", ".flac", ".m4a", ".aac"}
+VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".webm"}
+DOCUMENT_EXTS = {".pdf", ".docx", ".doc", ".txt", ".md"}
+CODE_EXTS = {".py", ".js", ".ts", ".html", ".css", ".java", ".cpp", ".c", ".cs", ".go", ".rs", ".php", ".rb", ".sql", ".sh"}
 
 
-# ── Routes ────────────────────────────────────────────────────────────────────
+def _serialize(obj):
+    return dataclasses.asdict(obj)
+
 
 @app.route("/")
 def index():
@@ -31,15 +45,26 @@ def analyze_text_route():
     data = request.get_json(force=True, silent=True) or {}
     text = data.get("text", "").strip()
     if not text:
-        return jsonify({"error": "No text provided."}), 400
+        return jsonify({"error": "No text provided for analysis."}), 400
 
-    from detector.text_detector import analyze_text
     result = analyze_text(text)
-    return jsonify(_result_to_dict(result))
+    return jsonify(_serialize(result))
 
 
-@app.route("/analyze/image", methods=["POST"])
-def analyze_image_route():
+@app.route("/analyze/code", methods=["POST"])
+def analyze_code_route():
+    data = request.get_json(force=True, silent=True) or {}
+    code = data.get("code", "").strip()
+    filename = data.get("filename", "code_snippet.py")
+    if not code:
+        return jsonify({"error": "No source code provided."}), 400
+
+    result = analyze_code(code, filename)
+    return jsonify(_serialize(result))
+
+
+@app.route("/analyze/media", methods=["POST"])
+def analyze_media_route():
     if "file" not in request.files:
         return jsonify({"error": "No file uploaded."}), 400
 
@@ -47,20 +72,44 @@ def analyze_image_route():
     if not f.filename:
         return jsonify({"error": "Empty filename."}), 400
 
-    ext = Path(f.filename).suffix.lower()
-    if ext not in ALLOWED_IMAGE_EXTS:
-        return jsonify({"error": f"Unsupported format: {ext}"}), 400
+    filename = f.filename
+    ext = Path(filename).suffix.lower()
+    file_bytes = f.read()
 
-    image_bytes = f.read()
-    from detector.image_detector import analyze_image
-    result = analyze_image(image_bytes, f.filename)
-    return jsonify(_result_to_dict(result))
+    if ext in IMAGE_EXTS:
+        result = analyze_image(file_bytes, filename)
+        return jsonify({"media_type": "image", "result": _serialize(result)})
+
+    elif ext in AUDIO_EXTS:
+        result = analyze_audio(file_bytes, filename)
+        return jsonify({"media_type": "audio", "result": _serialize(result)})
+
+    elif ext in VIDEO_EXTS:
+        result = analyze_video(file_bytes, filename)
+        return jsonify({"media_type": "video", "result": _serialize(result)})
+
+    elif ext in DOCUMENT_EXTS:
+        result = analyze_document(file_bytes, filename)
+        return jsonify({"media_type": "document", "result": _serialize(result)})
+
+    elif ext in CODE_EXTS:
+        code_str = file_bytes.decode("utf-8", errors="replace")
+        result = analyze_code(code_str, filename)
+        return jsonify({"media_type": "code", "result": _serialize(result)})
+
+    else:
+        # Fallback inspection: attempt image or document
+        try:
+            result = analyze_image(file_bytes, filename)
+            return jsonify({"media_type": "image", "result": _serialize(result)})
+        except Exception:
+            return jsonify({"error": f"Unsupported media format '{ext}'."}), 400
 
 
 if __name__ == "__main__":
-    print("=" * 55)
-    print("  AI Detector — Python Edition")
-    print("  http://127.0.0.1:5000")
-    print("  Models load on first request (~30s on first run)")
-    print("=" * 55)
+    print("=" * 65)
+    print("  Dutton & Co. Universal AI Detection Suite")
+    print("  Text | Images | Code | Audio | Video | Documents")
+    print("  Active at: http://127.0.0.1:5000")
+    print("=" * 65)
     app.run(debug=False, host="127.0.0.1", port=5000)
