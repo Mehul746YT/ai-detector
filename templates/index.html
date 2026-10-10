@@ -786,11 +786,55 @@ function switchTab(t) {
   document.getElementById('panel-' + t).classList.add('active');
 }
 
+function isGenericFilename(name) {
+  if (!name) return true;
+  const trimmed = name.trim();
+  if (/^(whatsapp\s*(?:image|video)|img[_\-\s\.]|image[_\-\s\.]|photo[_\-\s\.]|pic[_\-\s\.]|screenshot[_\-\s\.]|screen\s*shot|snip|pxl[_\-\s\.]|dsc[_\-\s\.]|dscn|sam[_\-\s\.]|mov[_\-\s\.]|vid[_\-\s\.]|video[_\-\s\.]|download[_\-\s\.]?\d*|unnamed|file|\d{6,}|\b[0-9a-f]{8,}\b)/i.test(trimmed)) {
+    return true;
+  }
+  if (/^[\d\s_\.\-]+$/.test(trimmed)) {
+    return true;
+  }
+  return false;
+}
+
 function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVideo = false, publicUrl = null) {
   const q = encodeURIComponent(query);
   const pUrl = publicUrl ? encodeURIComponent(publicUrl) : null;
+  const isGeneric = isGenericFilename(query);
   
-  const platforms = [
+  const visualPlatforms = [
+    {
+      name: 'Google Lens & Vision',
+      icon: 'LENS',
+      desc: 'Reverse visual search for identical keyframes, thumbnails, and scenes',
+      url: pUrl ? `https://lens.google.com/uploadbyurl?url=${pUrl}` : `https://images.google.com/`, 
+      btnText: 'Open Google Lens'
+    },
+    {
+      name: 'Yandex Visual Search',
+      icon: 'YANDEX',
+      desc: 'Best-in-class uncropped frame matching and actor/scene face indexing',
+      url: pUrl ? `https://yandex.com/images/search?rpt=imageview&url=${pUrl}` : `https://yandex.com/images/search?rpt=imageview`,
+      btnText: 'Search Yandex'
+    },
+    {
+      name: 'TinEye Reverse Image Search',
+      icon: 'TINEYE',
+      desc: 'Independent visual crawling index with billions of cataloged web photos',
+      url: pUrl ? `https://tineye.com/search?url=${pUrl}` : `https://tineye.com/search`,
+      btnText: 'Search TinEye'
+    },
+    {
+      name: 'Bing Visual Search',
+      icon: 'BING',
+      desc: 'Microsoft multi-modal video and visual entity search graph',
+      url: pUrl ? `https://www.bing.com/images/search?view=detailv2&iss=sbi&form=SBIIRP&sbisrc=UrlPaste&q=imgurl:${pUrl}` : `https://www.bing.com/visualsearch`,
+      btnText: 'Search Bing'
+    }
+  ];
+
+  const socialPlatforms = [
     {
       name: '𝕏 (Twitter / X)',
       icon: 'X',
@@ -811,20 +855,6 @@ function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVid
       desc: 'Search video titles, transcripts, Shorts, and upload history',
       url: `https://www.youtube.com/results?search_query=${q}`,
       btnText: 'Search YouTube'
-    },
-    {
-      name: 'Google Lens & Vision',
-      icon: 'LENS',
-      desc: 'Reverse visual search for identical keyframes, thumbnails, and scenes',
-      url: pUrl ? `https://lens.google.com/uploadbyurl?url=${pUrl}` : `https://images.google.com/`, 
-      btnText: 'Open Google Lens'
-    },
-    {
-      name: 'Yandex Visual Search',
-      icon: 'YANDEX',
-      desc: 'Best-in-class uncropped frame matching and actor/scene face indexing',
-      url: pUrl ? `https://yandex.com/images/search?rpt=imageview&url=${pUrl}` : `https://yandex.com/images/search?text=${q}`,
-      btnText: 'Search Yandex'
     },
     {
       name: 'Instagram & Reels',
@@ -853,17 +883,12 @@ function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVid
       desc: 'Discover video pins, aesthetic boards, and creator citations',
       url: `https://www.pinterest.com/search/pins/?q=${q}`,
       btnText: 'Search Pinterest'
-    },
-    {
-      name: 'Bing Visual Search',
-      icon: 'BING',
-      desc: 'Microsoft multi-modal video and visual entity search graph',
-      url: pUrl ? `https://www.bing.com/images/search?view=detailv2&iss=sbi&form=SBIIRP&sbisrc=UrlPaste&q=imgurl:${pUrl}` : `https://www.bing.com/images/search?q=${q}`,
-      btnText: 'Search Bing'
     }
   ];
 
-  let cards = platforms.map(p => `
+  const activePlatforms = isGeneric ? visualPlatforms : [...visualPlatforms, ...socialPlatforms];
+
+  let cards = activePlatforms.map(p => `
     <div class="platform-card">
       <div>
         <div class="platform-header"><span>${p.icon}</span> ${p.name}</div>
@@ -879,14 +904,16 @@ function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVid
     <div class="result-card">
       <div class="result-header">
         <div style="flex:1">
-          <div class="result-title">Cross-Platform Verification Matrix</div>
-          <div class="result-sub">Query: "${query}" · 10 Search Indices Synchronized</div>
+          <div class="result-title">${isGeneric ? 'Visual Reverse Search Engine Matrix' : 'Cross-Platform Verification Matrix'}</div>
+          <div class="result-sub">${isGeneric ? 'Device/Messenger Asset: "' + query + '" · Visual Pixel Indices Ready' : 'Query: "' + query + '" · ' + activePlatforms.length + ' Search Indices Synchronized'}</div>
         </div>
-        <div class="verdict verdict-mixed">Cross-Search Ready</div>
+        <div class="verdict verdict-human">Visual Search Ready</div>
       </div>
-      ${previewUrl ? `<div style="text-align:center;"><img src="${previewUrl}" class="preview-thumb" alt="Uploaded asset preview" /></div>` : ''}
-      <p style="font-size:0.8rem; color:var(--muted); margin-bottom:8px;">
-        Click any platform below to instantly run deep targeted queries across social networks, communities, and global vision engines:
+      ${previewUrl ? `<div style="text-align:center; margin-bottom:14px;"><img src="${previewUrl}" class="preview-thumb" alt="Uploaded asset preview" /></div>` : ''}
+      <p style="font-size:0.82rem; color:var(--muted); margin-bottom:12px; line-height:1.5;">
+        ${isGeneric 
+          ? 'Device camera or messenger filename detected. Use the dedicated visual search engines below to match the image pixel-by-pixel across the web:' 
+          : 'Click any platform below to instantly run deep targeted queries across social networks, communities, and global vision engines:'}
       </p>
       <div class="platform-grid">${cards}</div>
     </div>
@@ -898,6 +925,35 @@ async function runInWebsiteReverseSearch(query, previewUrl = null, isVideo = fal
   const container = document.getElementById('reverseResults');
   if (!container) return;
   
+  if (isGenericFilename(query)) {
+    const visualCards = generatePlatformLinks(query, true, previewUrl, isVideo);
+    container.innerHTML = `
+      <div class="result-card" style="margin-bottom:18px;">
+        <div class="result-header">
+          <div style="flex:1">
+            <div class="result-title">Direct Visual Reverse Image Search</div>
+            <div class="result-sub">Device/Messenger Asset: "${query}"</div>
+          </div>
+          <div class="verdict verdict-human">Visual Match Ready</div>
+        </div>
+        ${previewUrl ? `<div style="text-align:center; margin-bottom:14px;"><img src="${previewUrl}" class="preview-thumb" alt="Asset" /></div>` : ''}
+        <p style="font-size:0.84rem; color:var(--text); line-height:1.6; margin-bottom:14px;">
+          <strong>Device camera or messenger title detected ('${query}').</strong><br>
+          Encyclopedic text search was automatically bypassed to prevent false text matches. To find where these exact visual pixels have appeared across the web, use the visual image engines below:
+        </p>
+        <div style="margin-top:14px; padding-top:14px; border-top:1px solid var(--border);">
+          <div style="font-size:0.82rem; color:var(--muted); margin-bottom:8px;">Want to cross-reference a specific subject, person, or landmark in global archives?</div>
+          <div style="display:flex; gap:8px;">
+            <input type="text" id="manualReverseInput" placeholder="e.g. Landmark name, public figure, or news event..." style="flex:1; padding:8px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:0.85rem;" />
+            <button class="btn" style="margin-top:0; padding:8px 16px; font-size:0.85rem;" onclick="runInWebsiteReverseSearch(document.getElementById('manualReverseInput').value, '${previewUrl || ''}', false)">Search Archives</button>
+          </div>
+        </div>
+      </div>
+      ${visualCards}
+    `;
+    return;
+  }
+
   container.innerHTML = `
     <div class="result-card">
       <div class="loader">
@@ -922,7 +978,7 @@ async function runInWebsiteReverseSearch(query, previewUrl = null, isVideo = fal
         <div style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:16px; text-align:center; margin-top:14px;">
           <p style="font-size:0.85rem; color:var(--text); font-weight:600; margin-bottom:4px;">No Existing Match Found in Public Records</p>
           <p style="font-size:0.78rem; color:var(--muted); line-height:1.4;">
-            This query returned zero recorded visual duplicates in public encyclopedic and archival indices. This strongly indicates high uniqueness, novel synthesis, or recent generation.
+            This query returned zero recorded duplicates in public encyclopedic and archival indices. This indicates high uniqueness or private unpublished media.
           </p>
         </div>
       `;
@@ -946,7 +1002,6 @@ async function runInWebsiteReverseSearch(query, previewUrl = null, isVideo = fal
       verifiedHtml = `<div class="verified-grid">${cards}</div>`;
     }
 
-    // Combine in-website verified results with the cross-platform deep queries
     const platformMatrix = generatePlatformLinks(query, true, previewUrl, isVideo);
 
     container.innerHTML = `
@@ -954,7 +1009,7 @@ async function runInWebsiteReverseSearch(query, previewUrl = null, isVideo = fal
         <div class="result-header">
           <div style="flex:1">
             <div class="result-title">In-Website Forensic Record Verification</div>
-            <div class="result-sub">Query: "${query}" · ${results.length} Verified Records Found Within Site</div>
+            <div class="result-sub">Subject Query: "${query}" · ${results.length} Verified Records Found Within Site</div>
           </div>
           <div class="verdict ${results.length > 0 ? 'verdict-human' : 'verdict-mixed'}">
             ${results.length > 0 ? 'Recorded Matches' : 'Novel / Unindexed'}
@@ -1135,10 +1190,40 @@ async function uploadMedia(file, category) {
 
       let htmlOut = renderResult(resObj, `${category.toUpperCase()} Forensics`, sub);
 
-      // Automatically trigger reverse search verification inside website immediately upon image or video upload!
+      // Automatically trigger reverse search verification inside website immediately upon image or video upload
       if (category === 'images' || category === 'video') {
-        htmlOut += `<div id="${category}AutoReverse" style="margin-top:20px;"><div class="loader"><div class="spinner"></div><br>Verifying reverse search records within website...</div></div>`;
+        htmlOut += `<div id="${category}AutoReverse" style="margin-top:20px;"><div class="loader"><div class="spinner"></div><br>Preparing visual reverse search verification...</div></div>`;
         setTimeout(() => {
+          const revElem = document.getElementById(category + 'AutoReverse');
+          if (!revElem) return;
+
+          if (isGenericFilename(cleanName)) {
+            revElem.innerHTML = `
+              <div class="result-card" style="margin-bottom:14px;">
+                <div class="result-header">
+                  <div style="flex:1">
+                    <div class="result-title">Direct Visual Reverse Image Search</div>
+                    <div class="result-sub">Device/Messenger Title: "${cleanName}"</div>
+                  </div>
+                  <div class="verdict verdict-human">Visual Match Ready</div>
+                </div>
+                <p style="font-size:0.84rem; color:var(--text); line-height:1.6; margin-bottom:12px;">
+                  <strong>Device camera / messenger title detected ('${cleanName}').</strong><br>
+                  Text archive lookups were automatically bypassed to prevent false text matches. To find where these exact image pixels or video frames appear across the web, use the visual vision engines below:
+                </p>
+                <div style="margin-top:14px; padding-top:12px; border-top:1px solid var(--border);">
+                  <div style="font-size:0.82rem; color:var(--muted); margin-bottom:8px;">Want to cross-reference a specific subject, person, or landmark in global archives?</div>
+                  <div style="display:flex; gap:8px;">
+                    <input type="text" id="${category}ManualQuery" placeholder="e.g. Landmark name, celebrity, or news event..." style="flex:1; padding:8px 12px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-size:0.85rem;" />
+                    <button class="btn" style="margin-top:0; padding:8px 16px; font-size:0.85rem;" onclick="runInWebsiteReverseSearch(document.getElementById('${category}ManualQuery').value, '${previewUrl || ''}', ${category === 'video'})">Search Archives</button>
+                  </div>
+                </div>
+              </div>
+              <div style="margin-top:16px;">${generatePlatformLinks(cleanName, true, previewUrl, category === 'video', publicUrl)}</div>
+            `;
+            return;
+          }
+
           fetch('/verify/reverse', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
@@ -1163,16 +1248,15 @@ async function uploadMedia(file, category) {
               `).join('');
               vHtml = `<div class="verified-grid">${cards}</div>`;
             } else {
-              vHtml = `<div style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:12px; font-size:0.8rem; color:var(--muted); margin-top:10px;">Zero matches in public records. High indicator of novel generation.</div>`;
+              vHtml = `<div style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:12px; font-size:0.8rem; color:var(--muted); margin-top:10px;">Zero matches in public records. High indicator of novel generation or unindexed private media.</div>`;
             }
-            const revElem = document.getElementById(category + 'AutoReverse');
             if (revElem) {
               revElem.innerHTML = `
                 <div class="result-card">
                   <div class="result-header">
                     <div style="flex:1">
                       <div class="result-title">In-Website Forensic Record Verification</div>
-                      <div class="result-sub">${results.length} Verified Records Found In-Site for "${cleanName}"</div>
+                      <div class="result-sub">Subject Query: "${cleanName}" · ${results.length} Verified Records Found Within Site</div>
                     </div>
                     <div class="verdict ${results.length > 0 ? 'verdict-human' : 'verdict-mixed'}">
                       ${results.length > 0 ? 'Recorded Matches' : 'Novel / Unindexed'}
@@ -1184,7 +1268,6 @@ async function uploadMedia(file, category) {
               `;
             }
           }).catch(e => {
-            const revElem = document.getElementById(category + 'AutoReverse');
             if (revElem) {
               revElem.innerHTML = generatePlatformLinks(cleanName, true, previewUrl, category === 'video', publicUrl);
             }
