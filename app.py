@@ -132,6 +132,86 @@ def analyze_media_route():
             return jsonify({"error": f"Unsupported media format '{ext}'."}), 400
 
 
+
+@app.route("/verify/reverse", methods=["POST"])
+def verify_reverse_route():
+    """
+    In-website reverse search verification engine.
+    Fetches real matches, encyclopedic records, and archival media
+    directly within the website UI without redirecting users away.
+    """
+    import requests
+    data = request.get_json(force=True, silent=True) or {}
+    query = (data.get("query") or "").strip()
+    if not query:
+        return jsonify({"error": "No query provided."}), 400
+
+    q = requests.utils.quote(query)
+    results = []
+
+    # 1. Wikipedia Knowledge & Media Verification
+    try:
+        url = f"https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch={q}&prop=extracts|pageimages|info&inprop=url&exintro=1&explaintext=1&exchars=240&piprop=thumbnail&pithumbsize=360&format=json&gsrlimit=4"
+        r = requests.get(url, headers={"User-Agent": "DuttonCoForensics/1.0"}, timeout=5)
+        if r.status_code == 200:
+            pages = r.json().get("query", {}).get("pages", {})
+            for pid, p in pages.items():
+                results.append({
+                    "title": p.get("title", ""),
+                    "snippet": p.get("extract", ""),
+                    "thumbnail": p.get("thumbnail", {}).get("source"),
+                    "url": p.get("fullurl"),
+                    "source": "Wikipedia Global Knowledge Base",
+                    "badge": "RECORD VERIFIED"
+                })
+    except Exception:
+        pass
+
+    # 2. Wikimedia Commons Public Visual Media Archive
+    try:
+        url = f"https://commons.wikimedia.org/w/api.php?action=query&generator=search&gsrsearch={q}&gsrnamespace=6&prop=imageinfo&iiprop=url|size|extmetadata&format=json&gsrlimit=4"
+        r = requests.get(url, headers={"User-Agent": "DuttonCoForensics/1.0"}, timeout=5)
+        if r.status_code == 200:
+            pages = r.json().get("query", {}).get("pages", {})
+            for pid, p in pages.items():
+                ii = p.get("imageinfo", [{}])[0]
+                results.append({
+                    "title": p.get("title", "").replace("File:", ""),
+                    "snippet": f"Archived media ({ii.get('width', 0)}x{ii.get('height', 0)} px)",
+                    "thumbnail": ii.get("url"),
+                    "url": ii.get("descriptionurl") or ii.get("url"),
+                    "source": "Wikimedia Commons Visual Archive",
+                    "badge": "MEDIA MATCH"
+                })
+    except Exception:
+        pass
+
+    # 3. Internet Archive Media & Footage Records
+    try:
+        url = f"https://archive.org/advancedsearch.php?q={q}&fl[]=identifier,title,description,mediatype&rows=4&output=json"
+        r = requests.get(url, headers={"User-Agent": "DuttonCoForensics/1.0"}, timeout=5)
+        if r.status_code == 200:
+            docs = r.json().get("response", {}).get("docs", [])
+            for d in docs:
+                ident = d.get("identifier")
+                results.append({
+                    "title": d.get("title") or ident,
+                    "snippet": (d.get("description") or "")[:150],
+                    "thumbnail": f"https://archive.org/services/img/{ident}",
+                    "url": f"https://archive.org/details/{ident}",
+                    "source": "Internet Archive Global Media",
+                    "badge": "ARCHIVE ENTRY"
+                })
+    except Exception:
+        pass
+
+    return jsonify({
+        "query": query,
+        "total_matches": len(results),
+        "results": results
+    })
+
+
 if __name__ == "__main__":
     print("=" * 65)
     print("  Dutton & Co. Universal AI Detection Suite")
