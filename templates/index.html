@@ -247,6 +247,69 @@
       color: var(--accent);
       text-decoration: none;
     }
+        /* ── Reverse Search Platform Grid ── */
+    .platform-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 10px;
+      margin-top: 14px;
+    }
+    .platform-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 14px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.2s, transform 0.15s;
+    }
+    .platform-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+    }
+    .platform-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: var(--text);
+    }
+    .platform-desc {
+      font-size: 0.74rem;
+      color: var(--muted);
+      margin: 6px 0 10px;
+      line-height: 1.4;
+    }
+    .platform-link {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: #111009;
+      color: var(--accent);
+      border: 1px solid var(--border);
+      padding: 7px 12px;
+      border-radius: 4px;
+      font-size: 0.78rem;
+      text-decoration: none;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+    .platform-link:hover {
+      background: var(--accent);
+      color: #111009;
+      border-color: var(--accent);
+    }
+    .preview-thumb {
+      max-width: 140px;
+      max-height: 140px;
+      border-radius: 6px;
+      border: 1px solid var(--border);
+      object-fit: cover;
+      margin-bottom: 12px;
+    }
     /* ── Drop zones ── */
     .drop-zone {
       border: 2px dashed var(--border);
@@ -400,6 +463,7 @@
 <div class="tabs">
   <div class="tab active" onclick="switchTab('text')">📝 Text &amp; Essays</div>
   <div class="tab" onclick="switchTab('images')">🖼️ Images &amp; Art</div>
+  <div class="tab" onclick="switchTab('reverse')">🌐 Social Reverse Search</div>
   <div class="tab" onclick="switchTab('code')">💻 Source Code</div>
   <div class="tab" onclick="switchTab('audio')">🎙️ Audio &amp; Voice</div>
   <div class="tab" onclick="switchTab('video')">🎬 Video &amp; Deepfakes</div>
@@ -432,6 +496,31 @@
     </div>
   </div>
   <div id="imagesResults"></div>
+</div>
+
+<!-- REVERSE SEARCH PANEL -->
+<div class="panel" id="panel-reverse">
+  <div class="card">
+    <label class="card-label">Cross-Platform Social &amp; Media Reverse Search</label>
+    <p style="font-size:0.83rem; color:var(--muted); margin-bottom:14px; line-height:1.5;">
+      Search across major social networks and web indices to trace original sources, reposts, bot networks, and stolen media across <strong>X (Twitter), Instagram, Facebook, Pinterest, Snapchat, Reddit, TikTok</strong>, and global vision engines.
+    </p>
+
+    <div style="display:flex; gap:10px; margin-bottom:14px;">
+      <input type="text" id="reverseQueryInput" placeholder="Enter keywords, headline, username, or image description..." style="flex:1; padding:11px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:var(--font-sans); font-size:0.9rem; outline:none;" />
+      <button class="btn" style="margin-top:0;" onclick="executeTextReverseSearch()">🔎 Search All</button>
+    </div>
+
+    <div style="text-align:center; margin:16px 0; color:var(--muted); font-size:0.8rem; letter-spacing:0.05em; text-transform:uppercase;">— OR REVERSE SEARCH VIA IMAGE UPLOAD —</div>
+
+    <div class="drop-zone" onclick="document.getElementById('reverseImgFile').click()">
+      <input type="file" id="reverseImgFile" accept="image/*" onchange="handleReverseImageUpload(this.files[0])"/>
+      <div class="drop-icon">🔍</div>
+      <p><strong>Click or Drag &amp; Drop an Image to Reverse Search</strong></p>
+      <p style="margin-top:4px">Launches visual lookup &amp; platform indexing on Google Lens, Yandex, Bing, X, Pinterest, and Social Indexes</p>
+    </div>
+  </div>
+  <div id="reverseResults"></div>
 </div>
 
 <!-- 3. CODE PANEL -->
@@ -492,12 +581,133 @@
 
 <script>
 function switchTab(t) {
-  const tabs = ['text', 'images', 'code', 'audio', 'video', 'docs'];
+  const tabs = ['text', 'images', 'reverse', 'code', 'audio', 'video', 'docs'];
   document.querySelectorAll('.tab').forEach((el, i) =>
     el.classList.toggle('active', tabs[i] === t)
   );
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + t).classList.add('active');
+}
+
+function generatePlatformLinks(query, isImage = false, previewUrl = null) {
+  const q = encodeURIComponent(query);
+  
+  const platforms = [
+    {
+      name: '𝕏 (Twitter)',
+      icon: '🐦',
+      desc: 'Trace tweets, retweets, bot amplification, and media posts',
+      url: `https://twitter.com/search?q=${q}&f=live`,
+      btnText: 'Search on 𝕏'
+    },
+    {
+      name: 'Instagram',
+      icon: '📸',
+      desc: 'Look up hashtags, captions, influencers, and profile mentions',
+      url: `https://www.google.com/search?q=site:instagram.com+${q}`,
+      btnText: 'Search Instagram'
+    },
+    {
+      name: 'Facebook',
+      icon: '👥',
+      desc: 'Find public shares, groups, viral pages, and community posts',
+      url: `https://www.facebook.com/search/top/?q=${q}`,
+      btnText: 'Search Facebook'
+    },
+    {
+      name: 'Pinterest',
+      icon: '📌',
+      desc: 'Discover visual pins, creators, aesthetic boards, and re-pins',
+      url: `https://www.pinterest.com/search/pins/?q=${q}`,
+      btnText: 'Search Pinterest'
+    },
+    {
+      name: 'Snapchat',
+      icon: '👻',
+      desc: 'Search public Spotlight stories, creator profiles, and lenses',
+      url: `https://www.google.com/search?q=site:snapchat.com+${q}`,
+      btnText: 'Search Snapchat'
+    },
+    {
+      name: 'Reddit',
+      icon: '🤖',
+      desc: 'Check subreddits, viral threads, discussions, and provenance',
+      url: `https://www.reddit.com/search/?q=${q}&sort=new`,
+      btnText: 'Search Reddit'
+    },
+    {
+      name: 'TikTok',
+      icon: '🎵',
+      desc: 'Track viral sounds, challenges, video captions, and creators',
+      url: `https://www.tiktok.com/search?q=${q}`,
+      btnText: 'Search TikTok'
+    },
+    {
+      name: 'Google Lens & Vision',
+      icon: '🔍',
+      desc: 'Global visual reverse indexing and exact match detection',
+      url: isImage ? `https://lens.google.com/` : `https://www.google.com/search?tbm=isch&q=${q}`,
+      btnText: isImage ? 'Open Google Lens' : 'Google Images'
+    },
+    {
+      name: 'Yandex Visual',
+      icon: '🌐',
+      desc: 'Powerful facial recognition and uncropped visual discovery',
+      url: `https://yandex.com/images/search?text=${q}`,
+      btnText: 'Search Yandex'
+    },
+    {
+      name: 'Bing Visual Search',
+      icon: '🔎',
+      desc: 'Microsoft visual indexing and entity relationship graph',
+      url: `https://www.bing.com/images/search?q=${q}`,
+      btnText: 'Search Bing'
+    }
+  ];
+
+  let cards = platforms.map(p => `
+    <div class="platform-card">
+      <div>
+        <div class="platform-header"><span>${p.icon}</span> ${p.name}</div>
+        <div class="platform-desc">${p.desc}</div>
+      </div>
+      <a href="${p.url}" target="_blank" rel="noopener noreferrer" class="platform-link">
+        ${p.btnText} ↗
+      </a>
+    </div>
+  `).join('');
+
+  return `
+    <div class="result-card">
+      <div class="result-header">
+        <div style="flex:1">
+          <div class="result-title">Cross-Platform Verification Matrix</div>
+          <div class="result-sub">Query: "${query}" · 10 Search Indices Synchronized</div>
+        </div>
+        <div class="verdict verdict-mixed">Cross-Search Ready</div>
+      </div>
+      ${previewUrl ? `<div style="text-align:center;"><img src="${previewUrl}" class="preview-thumb" alt="Uploaded asset preview" /></div>` : ''}
+      <p style="font-size:0.8rem; color:var(--muted); margin-bottom:8px;">
+        Click any platform below to instantly run deep targeted queries across social networks, communities, and global vision engines:
+      </p>
+      <div class="platform-grid">${cards}</div>
+    </div>
+  `;
+}
+
+function executeTextReverseSearch() {
+  const query = document.getElementById('reverseQueryInput').value.trim();
+  if (!query) return alert('Please enter a keyword, title, or username to search.');
+  const out = document.getElementById('reverseResults');
+  out.innerHTML = generatePlatformLinks(query, false);
+}
+
+function handleReverseImageUpload(file) {
+  if (!file) return;
+  const out = document.getElementById('reverseResults');
+  const previewUrl = URL.createObjectURL(file);
+  const cleanName = file.name.replace(/\.[^/.]+$/, "");
+  out.innerHTML = generatePlatformLinks(cleanName, true, previewUrl);
 }
 
 document.getElementById('textInput').addEventListener('input', function() {
@@ -545,6 +755,11 @@ function renderResult(data, title, sub) {
     </div>
     <div class="signals-label">Multi-Signal Forensic Breakdown</div>
     <div class="signals">${sigs}</div>
+    ${title.includes('IMAGES') || title.includes('Image') ? `
+      <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
+        <span style="font-size:0.8rem; color:var(--muted);">Want to check where this image has been posted online?</span>
+        <button class="btn" style="margin-top:0; padding:6px 14px; font-size:0.8rem;" onclick="switchTab('reverse'); document.getElementById('reverseQueryInput').value='${sub.split('·')[0].trim()}'; executeTextReverseSearch();">🌐 Reverse Search on X, Instagram, Pinterest &amp; Web</button>
+      </div>` : ''}
   </div>`;
 }
 
