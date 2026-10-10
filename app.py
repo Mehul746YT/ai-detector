@@ -11,6 +11,7 @@ Supports:
 
 import dataclasses
 import os
+import re
 import tempfile
 import uuid
 from pathlib import Path
@@ -164,6 +165,23 @@ def analyze_media_route():
             return jsonify({"error": f"Unsupported media format '{ext}'."}), 400
 
 
+_GENERIC_FILENAME_PATTERN = re.compile(
+    r"^(whatsapp\s*(?:image|video)|img[_\-\s\.]|image[_\-\s\.]|photo[_\-\s\.]|pic[_\-\s\.]|screenshot[_\-\s\.]|screen\s*shot|snip|pxl[_\-\s\.]|dsc[_\-\s\.]|dscn|sam[_\-\s\.]|mov[_\-\s\.]|vid[_\-\s\.]|video[_\-\s\.]|download[_\-\s\.]?\d*|unnamed|file|\d{6,}|\b[0-9a-f]{8,}\b)",
+    re.IGNORECASE,
+)
+
+
+def _is_generic_query(q_str: str) -> bool:
+    if not q_str:
+        return True
+    cleaned = q_str.strip()
+    if _GENERIC_FILENAME_PATTERN.search(cleaned):
+        return True
+    if re.match(r"^[\d\s_\.\-]+$", cleaned):
+        return True
+    return False
+
+
 @app.route("/verify/reverse", methods=["POST"])
 def verify_reverse_route():
     """
@@ -176,6 +194,15 @@ def verify_reverse_route():
     query = (data.get("query") or "").strip()
     if not query:
         return jsonify({"error": "No query provided."}), 400
+
+    if _is_generic_query(query):
+        return jsonify({
+            "query": query,
+            "is_generic_filename": True,
+            "total_matches": 0,
+            "results": [],
+            "message": "Generic device/messenger filename detected ('" + query + "'). Direct visual reverse image search engines (Google Lens, Yandex, TinEye) are required to match exact image pixels."
+        })
 
     q = requests.utils.quote(query)
     results = []
@@ -238,6 +265,7 @@ def verify_reverse_route():
 
     return jsonify({
         "query": query,
+        "is_generic_filename": False,
         "total_matches": len(results),
         "results": results
     })
