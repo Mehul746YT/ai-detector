@@ -629,6 +629,113 @@
       }
     }
 
+    /* ── API Settings Modal & Indicator ── */
+    .api-settings-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      color: var(--accent);
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      letter-spacing: 0.04em;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .api-settings-btn:hover {
+      background: var(--surface);
+      border-color: var(--accent);
+    }
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(10, 9, 5, 0.78);
+      backdrop-filter: blur(4px);
+      z-index: 9999;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .modal-overlay.active {
+      display: flex;
+    }
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--accent);
+      border-radius: var(--r);
+      max-width: 540px;
+      width: 100%;
+      padding: 24px;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+      animation: fadeIn 0.25s ease;
+    }
+    .modal-title {
+      font-family: var(--font-serif);
+      font-size: 1.25rem;
+      color: var(--text);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--muted);
+      font-size: 1.2rem;
+      cursor: pointer;
+      line-height: 1;
+    }
+    .modal-close:hover {
+      color: var(--accent);
+    }
+    .modal-desc {
+      font-size: 0.82rem;
+      color: var(--muted);
+      line-height: 1.55;
+      margin-bottom: 16px;
+    }
+    .field-group {
+      margin-bottom: 14px;
+    }
+    .field-label {
+      display: block;
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 6px;
+    }
+    .field-input {
+      width: 100%;
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 10px 12px;
+      color: var(--text);
+      font-size: 0.86rem;
+      font-family: monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .field-input:focus {
+      border-color: var(--accent);
+    }
+    .field-help {
+      font-size: 0.74rem;
+      color: var(--muted);
+      margin-top: 4px;
+      line-height: 1.4;
+    }
+    .field-help a {
+      color: var(--accent);
+      text-decoration: underline;
+    }
   </style>
 </head>
 <body>
@@ -654,8 +761,51 @@
     <span class="pill"><b>ElevenLabs / Suno</b> Audio</span>
     <span class="pill"><b>Sora / Runway</b> Video</span>
     <span class="pill"><b>PDF / DOCX</b> Documents</span>
+    <button class="api-settings-btn" onclick="openApiModal()">
+      <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:var(--accent);" id="apiKeyIndicator"></span>
+      Configure AI APIs
+    </button>
   </div>
 </header>
+
+<!-- API KEY CONFIGURATION MODAL -->
+<div class="modal-overlay" id="apiModal" onclick="if(event.target===this) closeApiModal()">
+  <div class="modal-box">
+    <div class="modal-title">
+      <span>AI Inference APIs &amp; Tokens</span>
+      <button class="modal-close" onclick="closeApiModal()">&times;</button>
+    </div>
+    <div class="modal-desc">
+      Unlock state-of-the-art neural vision and text detectors. Keys are securely stored in your browser's private local storage and sent directly to serverless detection models.
+    </div>
+    
+    <div class="field-group">
+      <label class="field-label">Hugging Face Access Token (Free)</label>
+      <input type="password" class="field-input" id="modalHfToken" placeholder="hf_xxxxxxxxxxxxxxxxxxxxxxxxxxxx" />
+      <div class="field-help">
+        Powers Vision Transformers (<code>umm-maybe/AI-image-detector</code>, <code>Organika/sdxl-detector</code>) and RoBERTa text classifiers. Free token available at <a href="https://huggingface.co/settings/tokens" target="_blank" rel="noopener noreferrer">huggingface.co/settings/tokens</a>.
+      </div>
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Sightengine API User (Free Tier)</label>
+      <input type="text" class="field-input" id="modalSeUser" placeholder="e.g. 1827491823" />
+    </div>
+
+    <div class="field-group">
+      <label class="field-label">Sightengine API Secret</label>
+      <input type="password" class="field-input" id="modalSeSecret" placeholder="e.g. m8aKq9P..." />
+      <div class="field-help">
+        Industry gold-standard production deepfake &amp; generative AI image classifier. 2,000 free operations/mo at <a href="https://sightengine.com" target="_blank" rel="noopener noreferrer">sightengine.com</a>.
+      </div>
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding-top:14px; border-top:1px solid var(--border);">
+      <button type="button" class="btn" style="background:var(--surface2); border-color:var(--border); color:var(--muted); margin-top:0; padding:8px 16px; font-size:0.82rem;" onclick="clearApiKeys()">Clear Keys</button>
+      <button type="button" class="btn" style="margin-top:0; padding:9px 20px; font-size:0.86rem;" onclick="saveApiKeys()">Save Credentials</button>
+    </div>
+  </div>
+</div>
 
 <div class="tabs">
   <div class="tab active" onclick="switchTab('text')">Text &amp; Essays</div>
@@ -785,6 +935,69 @@ function switchTab(t) {
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   document.getElementById('panel-' + t).classList.add('active');
 }
+
+// ── API Key Management ──
+function getApiCredentials() {
+  return {
+    hfToken: localStorage.getItem('agy_hf_token') || '',
+    seUser: localStorage.getItem('agy_se_user') || '',
+    seSecret: localStorage.getItem('agy_se_secret') || ''
+  };
+}
+
+function updateApiKeyIndicator() {
+  const creds = getApiCredentials();
+  const ind = document.getElementById('apiKeyIndicator');
+  if (!ind) return;
+  const hasKey = !!(creds.hfToken || (creds.seUser && creds.seSecret));
+  ind.style.background = hasKey ? '#4a8c4a' : 'var(--accent)';
+  ind.title = hasKey ? 'Custom AI APIs Active' : 'Default / Fallback Mode';
+}
+
+function openApiModal() {
+  const creds = getApiCredentials();
+  document.getElementById('modalHfToken').value = creds.hfToken;
+  document.getElementById('modalSeUser').value = creds.seUser;
+  document.getElementById('modalSeSecret').value = creds.seSecret;
+  document.getElementById('apiModal').classList.add('active');
+}
+
+function closeApiModal() {
+  document.getElementById('apiModal').classList.remove('active');
+}
+
+function saveApiKeys() {
+  const hf = document.getElementById('modalHfToken').value.trim();
+  const seU = document.getElementById('modalSeUser').value.trim();
+  const seS = document.getElementById('modalSeSecret').value.trim();
+
+  if (hf) localStorage.setItem('agy_hf_token', hf);
+  else localStorage.removeItem('agy_hf_token');
+
+  if (seU) localStorage.setItem('agy_se_user', seU);
+  else localStorage.removeItem('agy_se_user');
+
+  if (seS) localStorage.setItem('agy_se_secret', seS);
+  else localStorage.removeItem('agy_se_secret');
+
+  updateApiKeyIndicator();
+  closeApiModal();
+  alert('AI API credentials saved successfully.');
+}
+
+function clearApiKeys() {
+  localStorage.removeItem('agy_hf_token');
+  localStorage.removeItem('agy_se_user');
+  localStorage.removeItem('agy_se_secret');
+  document.getElementById('modalHfToken').value = '';
+  document.getElementById('modalSeUser').value = '';
+  document.getElementById('modalSeSecret').value = '';
+  updateApiKeyIndicator();
+  alert('API credentials cleared.');
+}
+
+document.addEventListener('DOMContentLoaded', updateApiKeyIndicator);
+
 
 function isGenericFilename(name) {
   if (!name) return true;
@@ -1105,11 +1318,17 @@ function renderResult(data, title, sub) {
     </div>`;
   }).join('');
 
+  const apiBadge = data.api_used ? `
+    <div style="display:inline-block; margin-top:6px; font-size:0.75rem; letter-spacing:0.04em; color:var(--accent); background:var(--surface2); border:1px solid var(--accent); padding:2px 8px; border-radius:4px; font-weight:600;">
+      Powered by ${data.api_used}
+    </div>` : '';
+
   return `<div class="result-card">
     <div class="result-header">
       <div style="flex:1">
         <div class="result-title">${title}</div>
         <div class="result-sub">${sub}</div>
+        ${apiBadge}
       </div>
       <div class="verdict ${vc}">${data.verdict}</div>
     </div>
@@ -1137,10 +1356,15 @@ async function analyzeText() {
   btn.disabled = true;
   const out = document.getElementById('textResults');
   out.innerHTML = `<div class="loader"><div class="spinner"></div><br>Executing multi-model text transformers &amp; perplexity metrics...</div>`;
+  
+  const creds = getApiCredentials();
+  const headers = {'Content-Type': 'application/json'};
+  if (creds.hfToken) headers['X-HF-Token'] = creds.hfToken;
+
   try {
     const res = await fetch('/analyze/text', {
       method: 'POST',
-      headers: {'Content-Type': 'application/json'},
+      headers: headers,
       body: JSON.stringify({text})
     });
     const data = await res.json();
@@ -1176,8 +1400,15 @@ async function uploadMedia(file, category) {
   out.innerHTML = `<div class="loader"><div class="spinner"></div><br>Running multi-signal analysis on ${file.name}...</div>`;
   const fd = new FormData();
   fd.append('file', file);
+
+  const creds = getApiCredentials();
+  const headers = {};
+  if (creds.hfToken) headers['X-HF-Token'] = creds.hfToken;
+  if (creds.seUser) headers['X-Sightengine-User'] = creds.seUser;
+  if (creds.seSecret) headers['X-Sightengine-Secret'] = creds.seSecret;
+
   try {
-    const res = await fetch('/analyze/media', { method: 'POST', body: fd });
+    const res = await fetch('/analyze/media', { method: 'POST', headers: headers, body: fd });
     const data = await res.json();
     if (data.error) {
       out.innerHTML = `<div class="card err">Error: ${data.error}</div>`;
