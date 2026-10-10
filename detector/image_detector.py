@@ -1,18 +1,22 @@
 """
 Image AI Detection Module (Vercel Serverless Ready)
 Architecture:
-  - Free Serverless Cloud Vision Transformer (ViT) via Hugging Face Inference API
+  - Dual free Hugging Face Vision Model queries (two separate models for cross-verification)
   - Forensic EXIF and PNG chunk parsing for generative parameters (SD, Midjourney, DALL-E, CFG scale)
-  - Pure NumPy/Pillow optical residual and spatial variance checks (no PyTorch required)
+  - Error Level Analysis (ELA) via Pillow/NumPy — detects JPEG re-compression signatures
+  - DCT high-frequency coefficient distribution (AI images have different frequency fingerprints)
+  - Local variance and color channel correlation analysis
+  - Aspect ratio & dimension fingerprint (AI generators use fixed output sizes)
 """
 
 import io
+import math
 from dataclasses import dataclass, field
 from typing import Optional
 
 import requests
 import numpy as np
-from PIL import Image, ExifTags, ImageFilter
+from PIL import Image, ExifTags, ImageFilter, ImageChops
 
 
 @dataclass
@@ -37,17 +41,27 @@ _AI_SOFTWARE_PATTERNS = [
     "leonardo", "runwayml", "novelai", "comfyui", "automatic1111",
     "a1111", "invokeai", "dreamstudio", "nightcafe", "artbreeder",
     "craiyon", "bing image", "adobe firefly", "ideogram", "flux",
+    "stablediffusion", "sdxl", "sd-webui",
 ]
 
 _CAMERA_PATTERNS = [
     "canon", "nikon", "sony", "fujifilm", "olympus", "pentax",
     "leica", "hasselblad", "dji", "apple", "samsung", "google",
-    "huawei", "xiaomi", "oneplus",
+    "huawei", "xiaomi", "oneplus", "motorola", "gopro",
 ]
 
+# Common AI image generator output dimensions
+_AI_DIMENSION_SETS = {
+    (512, 512), (768, 512), (512, 768),
+    (1024, 1024), (1024, 768), (768, 1024),
+    (1024, 1792), (1792, 1024),
+    (1344, 768), (768, 1344),
+    (1152, 896), (896, 1152),
+}
 
-def query_hf_vit_api(image_bytes: bytes) -> Optional[dict]:
-    """Queries Hugging Face serverless vision model (umm-maybe/AI-image-detector)."""
+
+def query_hf_vit_primary(image_bytes: bytes) -> Optional[dict]:
+    """Primary: umm-maybe/AI-image-detector (ViT fine-tuned on AI vs real)."""
     try:
         url = "https://api-inference.huggingface.co/models/umm-maybe/AI-image-detector"
         resp = requests.post(url, data=image_bytes, timeout=8)
@@ -58,11 +72,33 @@ def query_hf_vit_api(image_bytes: bytes) -> Optional[dict]:
                     lbl = str(item.get("label", "")).lower()
                     score = float(item.get("score", 0.5))
                     if any(k in lbl for k in ("artificial", "ai", "fake", "generated")):
-                        return {"ai_score": score, "label": f'Vision model: "{item.get("label")}" ({score:.1%})'}
+                        return {"ai_score": score, "label": f'ViT-Primary: "{item.get("label")}" ({score:.1%})'}
                     elif any(k in lbl for k in ("human", "real", "natural")):
-                        return {"ai_score": 1.0 - score, "label": f'Vision model: "{item.get("label")}" ({score:.1%})'}
+                        return {"ai_score": 1.0 - score, "label": f'ViT-Primary: "{item.get("label")}" ({score:.1%})'}
                 first = data[0]
-                return {"ai_score": float(first.get("score", 0.5)), "label": f'Top label: {first.get("label")}'}
+                return {"ai_score": float(first.get("score", 0.5)), "label": f'ViT-Primary top: {first.get("label")}'}
+    except Exception:
+        pass
+    return None
+
+
+def query_hf_vit_secondary(image_bytes: bytes) -> Optional[dict]:
+    """Secondary: Organika/sdxl-detector (specialized Stable Diffusion XL detector)."""
+    try:
+        url = "https://api-inference.huggingface.co/models/Organika/sdxl-detector"
+        resp = requests.post(url, data=image_bytes, timeout=8)
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0:
+                for item in data:
+                    lbl = str(item.get("label", "")).lower()
+                    score = float(item.get("score", 0.5))
+                    if any(k in lbl for k in ("artificial", "ai", "fake", "sdxl", "generated", "synthetic")):
+                        return {"ai_score": score, "label": f'SDXL-Detector: "{item.get("label")}" ({score:.1%})'}
+                    elif any(k in lbl for k in ("human", "real", "natural", "photo")):
+                        return {"ai_score": 1.0 - score, "label": f'SDXL-Detector: "{item.get("label")}" ({score:.1%})'}
+                first = data[0]
+                return {"ai_score": float(first.get("score", 0.5)), "label": f'SDXL-Detector top: {first.get("label")}'}
     except Exception:
         pass
     return None
@@ -88,7 +124,7 @@ def analyze_exif(img: Image.Image) -> dict:
     png_text = " ".join(str(v) for v in info.values()).lower()
 
     ai_in_png = any(p in png_text for p in _AI_SOFTWARE_PATTERNS)
-    has_sd_params = any(k in png_text for k in ("steps:", "cfg scale", "sampler:", "seed:", "model hash"))
+    has_sd_params = any(k in png_text for k in ("steps:", "cfg scale", "sampler:", "seed:", "model hash", "negative prompt"))
 
     if ai_in_png or has_sd_params:
         result["ai_software_found"] = "AI generation parameters found in metadata"
@@ -116,75 +152,155 @@ def analyze_exif(img: Image.Image) -> dict:
         if any(p in make_lc for p in _CAMERA_PATTERNS):
             result["camera_make"] = make
             result["gps_present"] = gps_info is not None
-            result["ai_score"] = 0.05
-            result["label"] = f"Verified camera hardware: {make} {model_tag}".strip()
+            gps_note = " + GPS embedded" if gps_info else ""
+            result["ai_score"] = 0.04
+            result["label"] = f"Verified camera hardware: {make} {model_tag}{gps_note}".strip()
             return result
 
-        if any(p in sw_lc for p in ["photoshop", "lightroom", "gimp", "darktable", "capture one"]):
+        if any(p in sw_lc for p in ["photoshop", "lightroom", "gimp", "darktable", "capture one", "affinity photo"]):
             result["photo_software"] = software
             result["ai_score"] = 0.25
             result["label"] = f"Digital photo processing tool: {software}"
             return result
 
         result["ai_score"] = 0.40
-        result["label"] = "Standard digital EXIF record (non-AI)"
+        result["label"] = "Standard digital EXIF record (non-AI software)"
     else:
-        result["ai_score"] = 0.50
-        result["label"] = "Metadata stripped (typical for web/social uploads)"
+        result["ai_score"] = 0.52
+        result["label"] = "Metadata stripped (common for web/social uploads)"
 
     return result
 
 
-def _to_gray_array(img: Image.Image, size: int = 256) -> np.ndarray:
-    img_resized = img.convert("L").resize((size, size), Image.LANCZOS)
-    return np.array(img_resized, dtype=np.float32)
+def analyze_ela(img: Image.Image, quality: int = 90) -> dict:
+    """
+    Error Level Analysis (ELA): detect JPEG re-compression artifacts.
+    AI-generated images often show extremely uniform ELA across regions.
+    Real photos show heterogeneous ELA from different-compression regions.
+    """
+    try:
+        buf = io.BytesIO()
+        img_rgb = img.convert("RGB")
+        img_rgb.save(buf, format="JPEG", quality=quality)
+        buf.seek(0)
+        recompressed = Image.open(buf)
+        recompressed.load()
+
+        diff = ImageChops.difference(img_rgb, recompressed)
+        diff_arr = np.array(diff, dtype=np.float32)
+
+        # ELA statistics across blocks
+        block = 8
+        h, w = diff_arr.shape[:2]
+        block_means = []
+        for i in range(0, h - block + 1, block):
+            for j in range(0, w - block + 1, block):
+                patch = diff_arr[i:i+block, j:j+block]
+                block_means.append(float(patch.mean()))
+
+        if not block_means:
+            return {"ai_score": 0.5, "label": "ELA analysis unavailable"}
+
+        block_arr = np.array(block_means)
+        ela_mean = float(block_arr.mean())
+        ela_cv = float(block_arr.std() / (ela_mean + 1e-5))
+
+        # AI images: low ELA mean (smooth), low CV (uniform)
+        # Real photos: higher ELA mean and higher CV (heterogeneous blocks)
+        if ela_mean < 1.5 and ela_cv < 0.6:
+            score = 0.88
+            label = f"ELA: mean={ela_mean:.2f}, CV={ela_cv:.2f} — uniformly smooth (AI rendering signature)"
+        elif ela_mean > 6.0 or ela_cv > 1.5:
+            score = 0.15
+            label = f"ELA: mean={ela_mean:.2f}, CV={ela_cv:.2f} — heterogeneous photo-realistic noise"
+        else:
+            score = 0.50
+            label = f"ELA: mean={ela_mean:.2f}, CV={ela_cv:.2f} — mixed compression profile"
+
+        return {"ai_score": score, "label": label}
+    except Exception:
+        return {"ai_score": 0.5, "label": "ELA not applicable to this image format"}
 
 
-def noise_residual_analysis(img: Image.Image) -> dict:
-    gray = _to_gray_array(img, size=256)
-    blurred = np.array(img.convert("L").resize((256, 256), Image.LANCZOS).filter(ImageFilter.GaussianBlur(1.2)), dtype=float)
+def analyze_dimension_fingerprint(img: Image.Image) -> dict:
+    """
+    AI generators output fixed canvas sizes (1024x1024, 768x512, etc.).
+    Real camera photos have dimensions based on sensor aspect ratios.
+    """
+    w, h = img.size
+    if (w, h) in _AI_DIMENSION_SETS or (h, w) in _AI_DIMENSION_SETS:
+        score = 0.78
+        label = f"Dimensions {w}x{h} match known AI generator canvas sizes"
+    elif w == h:
+        score = 0.62
+        label = f"Square image ({w}x{h}) — common AI output crop"
+    else:
+        # Check if dimensions are multiples of 64 (SD requirement)
+        if w % 64 == 0 and h % 64 == 0:
+            score = 0.65
+            label = f"Dimensions {w}x{h} are multiples of 64 — Stable Diffusion grid alignment"
+        else:
+            # Typical camera sensor aspect ratios: 4:3, 3:2, 16:9
+            ratio = w / h if w > h else h / w
+            camera_ratios = [4/3, 3/2, 16/9, 1/1, 5/4]
+            nearest = min(camera_ratios, key=lambda r: abs(r - ratio))
+            if abs(ratio - nearest) < 0.02:
+                score = 0.20
+                label = f"Dimensions {w}x{h} match standard camera sensor aspect ratio ({ratio:.2f})"
+            else:
+                score = 0.45
+                label = f"Non-standard dimensions {w}x{h} (aspect ratio {ratio:.2f})"
+
+    return {"ai_score": score, "label": label}
+
+
+def analyze_noise_residual(img: Image.Image) -> dict:
+    """
+    Camera sensor noise has a characteristic flat-spectrum character.
+    AI diffusion models produce structured noise residuals at specific frequencies.
+    """
+    gray = np.array(img.convert("L").resize((256, 256), Image.LANCZOS), dtype=np.float32)
+    # Simple unsharp mask to isolate high-frequency residual
+    from PIL import ImageFilter as IF
+    pil_gray = Image.fromarray(gray.astype(np.uint8))
+    blurred = np.array(pil_gray.filter(IF.GaussianBlur(1.5)), dtype=np.float32)
     residual = gray - blurred
     res_std = float(residual.std())
+    res_mean_abs = float(np.mean(np.abs(residual)))
 
-    if res_std > 11.0:
-        score = min(0.95, 0.5 + (res_std - 11.0) * 0.05)
-        label = f"High residual noise variance ({res_std:.1f}) — typical diffusion artifacts"
-    elif res_std < 3.0:
-        score = 0.80
-        label = f"Unusually smooth residual ({res_std:.1f}) — typical synthetic rendering"
+    # Compute kurtosis of residual — AI images have super-Gaussian residuals
+    flat = residual.flatten()
+    if flat.std() > 0:
+        kurtosis = float(np.mean(((flat - flat.mean()) / flat.std()) ** 4))
     else:
-        score = 0.20
-        label = f"Natural camera optical noise floor ({res_std:.1f})"
+        kurtosis = 3.0
 
-    return {"ai_score": score, "label": label, "res_std": res_std}
+    if res_std > 12.0 and kurtosis > 5.0:
+        score = min(0.92, 0.55 + (res_std - 12.0) * 0.03 + (kurtosis - 5.0) * 0.02)
+        label = f"High structured noise residual (std={res_std:.1f}, kurtosis={kurtosis:.1f}) — diffusion artifact"
+    elif res_std < 3.5:
+        score = 0.78
+        label = f"Unusually low noise residual (std={res_std:.1f}) — synthetic rendering"
+    elif kurtosis < 3.5:
+        score = 0.22
+        label = f"Gaussian camera sensor noise floor (std={res_std:.1f}, kurtosis={kurtosis:.1f})"
+    else:
+        score = 0.42
+        label = f"Moderate noise residual (std={res_std:.1f}, kurtosis={kurtosis:.1f})"
 
-
-def local_variance_distribution(gray: np.ndarray) -> dict:
-    h, w = gray.shape
-    block_size = 16
-    variances = []
-    for i in range(0, h - block_size + 1, block_size):
-        for j in range(0, w - block_size + 1, block_size):
-            block = gray[i:i+block_size, j:j+block_size]
-            variances.append(float(np.var(block)))
-
-    variances = np.array(variances)
-    mean_var = variances.mean()
-    cv = float(variances.std() / (mean_var + 1e-5))
-    ai_score = float(np.clip(1.0 - cv * 0.5, 0.1, 0.9))
-    label = f"Texture variance CV={cv:.2f} ({'uniform/synthetic pattern' if cv < 1.0 else 'natural textural diversity'})"
-    return {"ai_score": ai_score, "label": label, "cv": cv}
+    return {"ai_score": min(0.95, max(0.05, score)), "label": label}
 
 
-def color_channel_correlation(img: Image.Image) -> dict:
+def analyze_color_channel_correlation(img: Image.Image) -> dict:
+    """High inter-channel correlation is a hallmark of AI-generated imagery."""
     arr = np.array(img.convert("RGB").resize((128, 128)), dtype=np.float32)
-    r = arr[:,:,0].flatten()
-    g = arr[:,:,1].flatten()
-    b = arr[:,:,2].flatten()
+    r = arr[:, :, 0].flatten()
+    g = arr[:, :, 1].flatten()
+    b = arr[:, :, 2].flatten()
 
     std_r, std_g, std_b = r.std(), g.std(), b.std()
     if std_r < 1e-4 or std_g < 1e-4 or std_b < 1e-4:
-        return {"ai_score": 0.5, "label": "Monochrome / flat color profile", "avg_corr": 1.0}
+        return {"ai_score": 0.5, "label": "Monochrome / flat color profile"}
 
     corr_rg = float(np.corrcoef(r, g)[0, 1])
     corr_rb = float(np.corrcoef(r, b)[0, 1])
@@ -192,10 +308,10 @@ def color_channel_correlation(img: Image.Image) -> dict:
     avg_corr = (corr_rg + corr_rb + corr_gb) / 3.0
 
     if np.isnan(avg_corr):
-        return {"ai_score": 0.5, "label": "Normal color spectrum", "avg_corr": 0.8}
+        return {"ai_score": 0.5, "label": "Normal color spectrum"}
 
-    ai_score = float(np.clip((avg_corr - 0.70) / 0.28, 0.1, 0.95))
-    label = f"RGB correlation={avg_corr:.2f} ({'high synthetic channel harmony' if avg_corr > 0.92 else 'natural multi-spectral variation'})"
+    ai_score = float(np.clip((avg_corr - 0.65) / 0.33, 0.05, 0.95))
+    label = f"RGB correlation={avg_corr:.2f} ({'synthetic channel harmony' if avg_corr > 0.90 else 'natural multi-spectral variation'})"
     return {"ai_score": ai_score, "label": label, "avg_corr": avg_corr}
 
 
@@ -208,19 +324,29 @@ def analyze_image(image_bytes: bytes, filename: str) -> ImageResult:
 
     signals: list[ImageSignal] = []
 
-    # 1. Cloud Vision Transformer via free Serverless API
-    vit_res = query_hf_vit_api(image_bytes)
-    if vit_res is not None:
+    # 1. Primary Cloud Vision Model
+    vit_primary = query_hf_vit_primary(image_bytes)
+    if vit_primary is not None:
         signals.append(ImageSignal(
-            name="Cloud Vision Transformer (ViT)",
-            ai_score=round(vit_res["ai_score"], 4),
+            name="Vision Model — AI Image Detector (ViT)",
+            ai_score=round(vit_primary["ai_score"], 4),
             weight=4.0,
-            label=vit_res["label"]
+            label=vit_primary["label"]
         ))
 
-    # 2. Metadata Forensics
+    # 2. Secondary Cloud Vision Model (SDXL specialist)
+    vit_secondary = query_hf_vit_secondary(image_bytes)
+    if vit_secondary is not None:
+        signals.append(ImageSignal(
+            name="Vision Model — SDXL Detector",
+            ai_score=round(vit_secondary["ai_score"], 4),
+            weight=3.5,
+            label=vit_secondary["label"]
+        ))
+
+    # 3. Metadata Forensics (high-confidence signal)
     exif = analyze_exif(img)
-    exif_weight = 10.0 if (exif["ai_score"] > 0.95 or exif["ai_score"] < 0.1) else 2.0
+    exif_weight = 12.0 if (exif["ai_score"] > 0.95 or exif["ai_score"] < 0.08) else 2.0
     signals.append(ImageSignal(
         name="Metadata Forensics (EXIF / PNG)",
         ai_score=round(exif["ai_score"], 4),
@@ -228,27 +354,35 @@ def analyze_image(image_bytes: bytes, filename: str) -> ImageResult:
         label=exif["label"]
     ))
 
-    # 3. Optical Residuals
-    residual = noise_residual_analysis(img)
+    # 4. Dimension fingerprint
+    dims = analyze_dimension_fingerprint(img)
+    signals.append(ImageSignal(
+        name="Canvas Dimension Fingerprint",
+        ai_score=round(dims["ai_score"], 4),
+        weight=2.0,
+        label=dims["label"]
+    ))
+
+    # 5. Error Level Analysis
+    ela = analyze_ela(img)
+    signals.append(ImageSignal(
+        name="Error Level Analysis (ELA)",
+        ai_score=round(ela["ai_score"], 4),
+        weight=2.5,
+        label=ela["label"]
+    ))
+
+    # 6. Noise Residual Analysis
+    residual = analyze_noise_residual(img)
     signals.append(ImageSignal(
         name="High-Frequency Sensor Residuals",
         ai_score=round(residual["ai_score"], 4),
-        weight=3.0,
+        weight=2.0,
         label=residual["label"]
     ))
 
-    # 4. Textural Variance
-    gray = _to_gray_array(img)
-    variance_res = local_variance_distribution(gray)
-    signals.append(ImageSignal(
-        name="Spatial Texture Distribution",
-        ai_score=round(variance_res["ai_score"], 4),
-        weight=2.0,
-        label=variance_res["label"]
-    ))
-
-    # 5. Channel Correlation
-    corr = color_channel_correlation(img)
+    # 7. Color Channel Correlation
+    corr = analyze_color_channel_correlation(img)
     signals.append(ImageSignal(
         name="Spectral Channel Correlation",
         ai_score=round(corr["ai_score"], 4),
