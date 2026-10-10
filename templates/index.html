@@ -608,8 +608,8 @@
 <div class="panel" id="panel-images">
   <div class="card">
     <label class="card-label">Analyze Images &amp; AI Art</label>
-    <div class="drop-zone" onclick="document.getElementById('imgFile').click()">
-      <input type="file" id="imgFile" accept="image/*" onchange="uploadMedia(this.files[0], 'images')"/>
+    <div class="drop-zone" id="imgDropZone" onclick="document.getElementById('imgFile').click()">
+      <input type="file" id="imgFile" accept="image/*" onchange="if(this.files &amp;&amp; this.files[0]){ uploadMedia(this.files[0], 'images'); }"/>
       <div class="drop-icon">IMG</div>
       <p><strong>Click or Drag &amp; Drop Image</strong></p>
       <p style="margin-top:4px">JPG · PNG · WebP · TIFF · BMP (Vision Transformer + Sensor Residuals + EXIF)</p>
@@ -633,8 +633,8 @@
 
     <div style="text-align:center; margin:16px 0; color:var(--muted); font-size:0.8rem; letter-spacing:0.05em; text-transform:uppercase;">— OR REVERSE SEARCH VIA IMAGE &amp; VIDEO UPLOAD —</div>
 
-    <div class="drop-zone" onclick="document.getElementById('reverseMediaFile').click()">
-      <input type="file" id="reverseMediaFile" accept="image/*,video/*" onchange="handleReverseMediaUpload(this.files[0])"/>
+    <div class="drop-zone" id="revDropZone" onclick="document.getElementById('reverseMediaFile').click()">
+      <input type="file" id="reverseMediaFile" accept="image/*,video/*" onchange="if(this.files &amp;&amp; this.files[0]){ handleReverseMediaUpload(this.files[0]); }"/>
       <div class="drop-icon">MEDIA SEARCH</div>
       <p><strong>Click or Drag &amp; Drop an Image or Video File</strong></p>
       <p style="margin-top:4px">Supports JPG, PNG, WebP, MP4, MOV, WebM. Automatically extracts video keyframes for visual cross-network lookup on Google Lens, Yandex, Bing, X, YouTube, and Social Engines.</p>
@@ -709,7 +709,9 @@ function switchTab(t) {
   document.getElementById('panel-' + t).classList.add('active');
 }
 
-function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVideo = false) {
+function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVideo = false, publicUrl = null) {
+  const q = encodeURIComponent(query);
+  const pUrl = publicUrl ? encodeURIComponent(publicUrl) : null;
   const q = encodeURIComponent(query);
   
   const platforms = [
@@ -738,14 +740,14 @@ function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVid
       name: 'Google Lens & Vision',
       icon: 'LENS',
       desc: 'Reverse visual search for identical keyframes, thumbnails, and scenes',
-      url: `https://lens.google.com/`,
+      url: pUrl ? `https://lens.google.com/uploadbyurl?url=${pUrl}` : `https://images.google.com/`, 
       btnText: 'Open Google Lens'
     },
     {
       name: 'Yandex Visual Search',
       icon: 'YANDEX',
       desc: 'Best-in-class uncropped frame matching and actor/scene face indexing',
-      url: `https://yandex.com/images/search?text=${q}`,
+      url: pUrl ? `https://yandex.com/images/search?rpt=imageview&url=${pUrl}` : `https://yandex.com/images/search?text=${q}`,
       btnText: 'Search Yandex'
     },
     {
@@ -780,7 +782,7 @@ function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVid
       name: 'Bing Visual Search',
       icon: 'BING',
       desc: 'Microsoft multi-modal video and visual entity search graph',
-      url: `https://www.bing.com/images/search?q=${q}`,
+      url: pUrl ? `https://www.bing.com/images/search?view=detailv2&iss=sbi&form=SBIIRP&sbisrc=UrlPaste&q=imgurl:${pUrl}` : `https://www.bing.com/images/search?q=${q}`,
       btnText: 'Search Bing'
     }
   ];
@@ -968,12 +970,40 @@ async function uploadMedia(file, category) {
     } else {
       const resObj = data.result;
       const sub = `${file.name} · ${(file.size/1024).toFixed(1)} KB`;
-      out.innerHTML = renderResult(resObj, `${category.toUpperCase()} Forensics`, sub);
+      const cleanName = file.name.replace(/\.[^/.]+$/, "");
+      const previewUrl = URL.createObjectURL(file);
+      const publicUrl = data.public_url || null;
+
+      let htmlOut = renderResult(resObj, `${category.toUpperCase()} Forensics`, sub);
+
+      // Automatically append reverse search matrix immediately upon image or video upload!
+      if (category === 'images' || category === 'video') {
+        htmlOut += `<div style="margin-top:20px;">` + generatePlatformLinks(cleanName, true, previewUrl, category === 'video', publicUrl) + `</div>`;
+      }
+
+      out.innerHTML = htmlOut;
     }
   } catch(e) {
     out.innerHTML = `<div class="card err">Error: Media upload error: ${e.message}</div>`;
   }
 }
+
+// Global drag-and-drop auto handlers
+document.querySelectorAll('.drop-zone').forEach(zone => {
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.style.borderColor = 'var(--accent)'; });
+  zone.addEventListener('dragleave', e => { zone.style.borderColor = 'var(--border)'; });
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.style.borderColor = 'var(--border)';
+    const input = zone.querySelector('input[type="file"]');
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      input.files = e.dataTransfer.files;
+      const evt = new Event('change', { bubbles: true });
+      input.dispatchEvent(evt);
+    }
+  });
+});
+
 </script>
 
 <footer>
