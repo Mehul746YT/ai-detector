@@ -11,15 +11,22 @@ Supports:
 
 import dataclasses
 import os
+import tempfile
 import uuid
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request, send_from_directory
+from flask import Flask, jsonify, render_template, request, send_from_directory, send_file
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
-UPLOADS_DIR = os.path.join(BASE_DIR, "public", "uploads")
-os.makedirs(UPLOADS_DIR, exist_ok=True)
+PUBLIC_DIR = os.path.join(BASE_DIR, "public")
+
+# On serverless (Vercel/AWS), use system temporary directory for any writable scratch
+UPLOADS_DIR = os.path.join(tempfile.gettempdir(), "ai_detector_uploads")
+try:
+    os.makedirs(UPLOADS_DIR, exist_ok=True)
+except Exception:
+    pass
 
 from detector.text_detector import analyze_text
 from detector.image_detector import analyze_image
@@ -28,7 +35,7 @@ from detector.document_detector import analyze_document
 from detector.code_detector import analyze_code
 from detector.video_detector import analyze_video
 
-app = Flask(__name__, template_folder=TEMPLATES_DIR)
+app = Flask(__name__, template_folder=TEMPLATES_DIR, static_folder=PUBLIC_DIR)
 app.config["MAX_CONTENT_LENGTH"] = 64 * 1024 * 1024  # 64 MB upload limit
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".heic"}
@@ -42,15 +49,40 @@ def _serialize(obj):
     return dataclasses.asdict(obj)
 
 
+@app.route("/favicon.ico")
+def favicon_ico():
+    for fav_path in [
+        os.path.join(PUBLIC_DIR, "favicon.ico"),
+        os.path.join(TEMPLATES_DIR, "favicon.ico")
+    ]:
+        if os.path.exists(fav_path):
+            return send_file(fav_path, mimetype="image/vnd.microsoft.icon")
+    return ("", 204)
+
+
+@app.route("/favicon.png")
+def favicon_png():
+    for fav_path in [
+        os.path.join(PUBLIC_DIR, "favicon.png"),
+        os.path.join(PUBLIC_DIR, "favicon-128.png"),
+        os.path.join(TEMPLATES_DIR, "favicon.png")
+    ]:
+        if os.path.exists(fav_path):
+            return send_file(fav_path, mimetype="image/png")
+    return ("", 204)
+
+
 @app.route("/uploads/<filename>")
 def serve_upload(filename):
-    return send_from_directory(UPLOADS_DIR, filename)
+    if os.path.exists(os.path.join(UPLOADS_DIR, filename)):
+        return send_from_directory(UPLOADS_DIR, filename)
+    return jsonify({"error": "File not found"}), 404
 
 
 @app.route("/", defaults={"path": ""})
 @app.route("/<path:path>")
 def catch_all(path):
-    if path.startswith("analyze/"):
+    if path.startswith("analyze/") or path.startswith("verify/"):
         return jsonify({"error": "Method Not Allowed"}), 405
     return render_template("index.html")
 
@@ -91,7 +123,7 @@ def analyze_media_route():
     ext = Path(filename).suffix.lower()
     file_bytes = f.read()
 
-    # Save to uploads directory for public URL referencing in reverse search
+    # Save to uploads directory for public URL referencing if needed
     public_url = None
     try:
         saved_name = f"{uuid.uuid4().hex[:12]}{ext}"
@@ -130,7 +162,6 @@ def analyze_media_route():
             return jsonify({"media_type": "image", "result": _serialize(result), "public_url": public_url})
         except Exception:
             return jsonify({"error": f"Unsupported media format '{ext}'."}), 400
-
 
 
 @app.route("/verify/reverse", methods=["POST"])
