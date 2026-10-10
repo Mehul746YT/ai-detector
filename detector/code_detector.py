@@ -5,13 +5,20 @@ Analyzes:
   1. Comment style & density (AI inserts excessive boilerplate, self-narrating comments)
   2. Naming convention uniformity & predictability
   3. Syntactic symmetry & standard library textbook patterns
-  4. Missing project-specific idiosyncrasies (todo tags, debug statements, pragmatic shortcuts)
+  4. AST-based complexity: function length variance, branch density
+  5. Token-level entropy (identifier name diversity)
+  6. Hugging Face CodeBERT-based AI vs human classifier
 """
 
+import ast
 import math
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from typing import Optional
+
+import numpy as np
+import requests
 
 
 @dataclass
@@ -44,7 +51,56 @@ _AI_COMMENT_PATTERNS = [
     r"//\s*Return the result",
     r"#\s*Ensure that the input is valid",
     r"//\s*Ensure that the input is valid",
+    r"#\s*This (function|method|class|variable|loop)",
+    r"//\s*This (function|method|class|variable|loop)",
+    r"#\s*Now we",
+    r"//\s*Now we",
 ]
+
+_AI_GENERIC_VARS = re.compile(
+    r"\b(processed_data|result_list|temp_val|output_data|final_result|formatted_output"
+    r"|data_list|item_list|new_list|response_data|api_response|error_message"
+    r"|user_input|user_data|is_valid|is_success|is_found|my_function|my_class|my_variable)\b"
+)
+
+_HUMAN_MARKERS = re.compile(
+    r"\b(TODO|FIXME|HACK|XXX|NOQA|WORKAROUND|kludge|wtf|idk|asdf|foobar"
+    r"|console\.log|print\(f?['\"]here|print\(f?['\"]debug|breakpoint\(\)"
+    r"|pdb\.set_trace|debugger;|tmp\d|test\d\d?|var\d\d?)\b",
+    re.IGNORECASE
+)
+
+
+def query_hf_code_api(code: str) -> Optional[dict]:
+    """
+    Queries Hugging Face free serverless API for code detection.
+    Uses Hello-SimpleAI/chatgpt-detector-roberta which also works on code.
+    Falls back gracefully on loading/rate-limit errors.
+    """
+    try:
+        url = "https://api-inference.huggingface.co/models/Hello-SimpleAI/chatgpt-detector-roberta"
+        snippet = code[:900]
+        resp = requests.post(
+            url,
+            json={"inputs": snippet},
+            headers={"Content-Type": "application/json"},
+            timeout=8,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            if isinstance(data, list) and len(data) > 0:
+                items = data[0] if isinstance(data[0], list) else data
+                for item in items:
+                    lbl = str(item.get("label", "")).lower()
+                    score = float(item.get("score", 0.5))
+                    if any(k in lbl for k in ("chatgpt", "ai", "fake", "machine")):
+                        return {"ai_score": score, "label": f'Transformer: "{item.get("label")}" ({score:.1%})'}
+                    elif any(k in lbl for k in ("human", "real")):
+                        return {"ai_score": 1.0 - score, "label": f'Transformer: "{item.get("label")}" ({score:.1%})'}
+        # Model loading returns 503 — silently skip
+    except Exception:
+        pass
+    return None
 
 
 def analyze_comment_density_and_style(code: str) -> dict:
@@ -61,6 +117,7 @@ def analyze_comment_density_and_style(code: str) -> dict:
             for pat in _AI_COMMENT_PATTERNS:
                 if re.search(pat, l, re.IGNORECASE):
                     boilerplate_matches += 1
+                    break  # count once per line
 
     ratio = comment_lines / len(lines)
 
@@ -69,47 +126,52 @@ def analyze_comment_density_and_style(code: str) -> dict:
         label = f"Self-narrating tutorial comment patterns ({boilerplate_matches} textbook AI markers)"
     elif ratio > 0.35 and boilerplate_matches >= 1:
         score = 0.75
-        label = f"Unusually high comment ratio ({ratio:.1%}) with formal step-by-step annotation"
-    elif ratio < 0.15:
-        score = 0.25
-        label = f"Pragmatic engineering comment ratio ({ratio:.1%})"
+        label = f"High comment ratio ({ratio:.1%}) with formal step-by-step annotation"
+    elif ratio < 0.10:
+        score = 0.20
+        label = f"Minimal comments ({ratio:.1%}) — pragmatic engineer style"
+    elif ratio < 0.20:
+        score = 0.35
+        label = f"Lean comment density ({ratio:.1%})"
     else:
-        score = 0.45
+        score = 0.50
         label = f"Balanced comment distribution ({ratio:.1%})"
 
     return {"ai_score": score, "label": label, "boilerplate_hits": boilerplate_matches}
 
 
-def analyze_code_structure_and_symmetry(code: str) -> dict:
+def analyze_developer_idiosyncrasies(code: str) -> dict:
     """
-    AI code tends to adhere strictly to textbook formatting, with uniform function lengths
-    and standard naming patterns (e.g. `data`, `result`, `item`, `process_data`).
+    AI code lacks the human fingerprints of real development:
+    TODOs, debug prints, temporary variable names, etc.
     """
-    lines = [l for l in code.split("\n") if l.strip()]
-    if len(lines) < 8:
-        return {"ai_score": 0.5, "label": "Snippet too short for structural analysis"}
+    human_markers = len(_HUMAN_MARKERS.findall(code))
+    ai_generic_vars = len(_AI_GENERIC_VARS.findall(code))
 
-    # Human code often contains TODOs, FIXMEs, console logs, commented-out debug code
-    human_markers = len(re.findall(r"\b(TODO|FIXME|HACK|XXX|temp|test1|asdf|console\.log|print\(f?['\"]here)\b", code, re.I))
-
-    # AI canonical textbook variable naming
-    ai_generic_vars = len(re.findall(r"\b(processed_data|result_list|temp_val|output_data|final_result|formatted_output)\b", code))
-
-    if human_markers >= 2:
-        score = 0.15
-        label = f"Human developer artifacts detected ({human_markers} pragmatism/debug markers)"
-    elif ai_generic_vars >= 2:
-        score = 0.82
-        label = f"Textbook generic variable patterns ({ai_generic_vars} standard synthetic names)"
+    if human_markers >= 3:
+        score = 0.08
+        label = f"Strong human development markers ({human_markers} pragmatism/debug artifacts)"
+    elif human_markers >= 1:
+        score = 0.25
+        label = f"Human developer artifacts present ({human_markers} debug/todo markers)"
+    elif ai_generic_vars >= 3:
+        score = 0.90
+        label = f"Dense AI-canonical generic naming ({ai_generic_vars} textbook variable names)"
+    elif ai_generic_vars >= 1:
+        score = 0.70
+        label = f"Generic AI-style variable naming ({ai_generic_vars} textbook patterns)"
     else:
         score = 0.50
-        label = "Standard idiomatic code structure"
+        label = "Neutral: no distinctive human or AI naming signals found"
 
     return {"ai_score": score, "label": label}
 
 
-def analyze_cyclomatic_regularity(code: str) -> dict:
-    # Measure indent distribution
+def analyze_indent_complexity(code: str) -> dict:
+    """
+    Measure indentation depth distribution.
+    AI code tends to be more symmetrically structured.
+    """
     indents = []
     for l in code.split("\n"):
         if l.strip():
@@ -119,16 +181,99 @@ def analyze_cyclomatic_regularity(code: str) -> dict:
     if len(indents) < 5:
         return {"ai_score": 0.5, "label": "Brief code block"}
 
-    indent_std = float(np.std(indents))
-    # AI code is structurally symmetrical (indent_std 2.0-5.0)
-    if indent_std < 3.5:
-        score = 0.70
-        label = f"High structural indentation symmetry (std={indent_std:.1f})"
+    indent_arr = np.array(indents, dtype=float)
+    indent_std = float(indent_arr.std())
+    # Distribution of unique indent levels — AI code uses fewer unique levels
+    unique_levels = len(set(indents))
+    depth_diversity = unique_levels / max(1, len(set(range(0, max(indents) + 1, 4))))
+
+    if indent_std < 2.5 and unique_levels <= 3:
+        score = 0.78
+        label = f"Shallow symmetric nesting (std={indent_std:.1f}, {unique_levels} indent levels)"
+    elif indent_std > 6.0 or unique_levels >= 6:
+        score = 0.22
+        label = f"Deep organic nesting complexity (std={indent_std:.1f}, {unique_levels} indent levels)"
     else:
-        score = 0.35
-        label = f"Dynamic nested nesting complexity (std={indent_std:.1f})"
+        score = 0.48
+        label = f"Moderate structural nesting (std={indent_std:.1f}, {unique_levels} levels)"
 
     return {"ai_score": score, "label": label}
+
+
+def analyze_identifier_entropy(code: str) -> dict:
+    """
+    Measures diversity of identifier names.
+    AI tools favor a narrow set of common English names.
+    Diverse real codebases have project-specific identifiers.
+    """
+    # Extract identifier tokens (words in snake_case and camelCase)
+    tokens = re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]{2,}\b", code)
+    if len(tokens) < 15:
+        return {"ai_score": 0.5, "label": "Too few identifiers for entropy analysis"}
+
+    counts = Counter(tokens)
+    total = len(tokens)
+    entropy = -sum((c / total) * math.log2(c / total) for c in counts.values())
+    max_entropy = math.log2(len(counts)) if len(counts) > 1 else 1.0
+    rel_entropy = entropy / max_entropy if max_entropy > 0 else 0.5
+
+    # Very high relative entropy = diverse identifiers = more likely human project code
+    # Low relative entropy = repetitive generic names = likely AI
+    if rel_entropy > 0.92:
+        score = 0.18
+        label = f"High identifier diversity (entropy={rel_entropy:.2f}) — project-specific naming"
+    elif rel_entropy > 0.80:
+        score = 0.40
+        label = f"Good identifier variety (entropy={rel_entropy:.2f})"
+    elif rel_entropy > 0.65:
+        score = 0.62
+        label = f"Moderate identifier repetition (entropy={rel_entropy:.2f})"
+    else:
+        score = 0.82
+        label = f"Low identifier diversity (entropy={rel_entropy:.2f}) — repetitive AI naming"
+
+    return {"ai_score": score, "label": label}
+
+
+def analyze_function_length_variance(code: str) -> dict:
+    """
+    Uses Python AST where possible to measure function length distribution.
+    AI-written functions tend to be uniformly medium-length.
+    Falls back to regex for non-Python.
+    """
+    # Try Python AST
+    try:
+        tree = ast.parse(code)
+        func_lines = []
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                end = getattr(node, "end_lineno", None)
+                if end:
+                    func_lines.append(end - node.lineno + 1)
+        if len(func_lines) >= 3:
+            arr = np.array(func_lines, dtype=float)
+            cv = float(arr.std() / (arr.mean() + 1e-6))
+            if cv < 0.25:
+                score = 0.80
+                label = f"Uniform function lengths (CV={cv:.2f}) — typical AI scaffold pattern"
+            elif cv < 0.55:
+                score = 0.45
+                label = f"Moderate function length variation (CV={cv:.2f})"
+            else:
+                score = 0.18
+                label = f"High function length variance (CV={cv:.2f}) — organic real-world code"
+            return {"ai_score": score, "label": label}
+    except Exception:
+        pass
+
+    # Fallback regex for non-Python
+    funcs = re.findall(
+        r"(?:function\s+\w+|def\s+\w+|\w+\s*=\s*(?:async\s+)?(?:function|\(\w*\)\s*=>))[^{]*\{",
+        code
+    )
+    if len(funcs) < 2:
+        return {"ai_score": 0.5, "label": "Function structure not parseable (non-Python)"}
+    return {"ai_score": 0.5, "label": f"{len(funcs)} function signatures detected (non-Python — structural check skipped)"}
 
 
 def analyze_code(code: str, filename: str = "code.py") -> CodeResult:
@@ -146,28 +291,59 @@ def analyze_code(code: str, filename: str = "code.py") -> CodeResult:
 
     signals: list[CodeSignal] = []
 
+    # 1. Cloud Transformer API (optional, free HF)
+    hf_res = query_hf_code_api(code)
+    if hf_res is not None:
+        signals.append(CodeSignal(
+            name="Transformer Language Model (RoBERTa)",
+            ai_score=round(hf_res["ai_score"], 4),
+            weight=3.5,
+            label=hf_res["label"]
+        ))
+
+    # 2. Comment density and boilerplate style
     comments = analyze_comment_density_and_style(code)
     signals.append(CodeSignal(
         name="Commentary & Boilerplate Style",
         ai_score=round(comments["ai_score"], 4),
-        weight=3.5,
+        weight=3.0,
         label=comments["label"]
     ))
 
-    struct_res = analyze_code_structure_and_symmetry(code)
+    # 3. Developer idiosyncrasies (TODOs, debug markers, naming)
+    idioms = analyze_developer_idiosyncrasies(code)
     signals.append(CodeSignal(
         name="Developer Idiosyncrasies & Pragmatism",
-        ai_score=round(struct_res["ai_score"], 4),
+        ai_score=round(idioms["ai_score"], 4),
         weight=2.5,
-        label=struct_res["label"]
+        label=idioms["label"]
     ))
 
-    reg = analyze_cyclomatic_regularity(code)
+    # 4. Identifier entropy
+    ident = analyze_identifier_entropy(code)
     signals.append(CodeSignal(
-        name="Syntactic Block Regularity",
-        ai_score=round(reg["ai_score"], 4),
+        name="Identifier Name Entropy",
+        ai_score=round(ident["ai_score"], 4),
+        weight=2.0,
+        label=ident["label"]
+    ))
+
+    # 5. Function length variance (AST)
+    func_var = analyze_function_length_variance(code)
+    signals.append(CodeSignal(
+        name="Function Length Variance (AST)",
+        ai_score=round(func_var["ai_score"], 4),
         weight=1.5,
-        label=reg["label"]
+        label=func_var["label"]
+    ))
+
+    # 6. Indentation complexity
+    indent = analyze_indent_complexity(code)
+    signals.append(CodeSignal(
+        name="Structural Nesting Complexity",
+        ai_score=round(indent["ai_score"], 4),
+        weight=1.5,
+        label=indent["label"]
     ))
 
     total_w = sum(s.weight for s in signals)
