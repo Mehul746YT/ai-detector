@@ -631,13 +631,13 @@
       <button class="btn" style="margin-top:0;" onclick="executeTextReverseSearch()">Search All Platforms</button>
     </div>
 
-    <div style="text-align:center; margin:16px 0; color:var(--muted); font-size:0.8rem; letter-spacing:0.05em; text-transform:uppercase;">— OR REVERSE SEARCH VIA IMAGE UPLOAD —</div>
+    <div style="text-align:center; margin:16px 0; color:var(--muted); font-size:0.8rem; letter-spacing:0.05em; text-transform:uppercase;">— OR REVERSE SEARCH VIA IMAGE &amp; VIDEO UPLOAD —</div>
 
-    <div class="drop-zone" onclick="document.getElementById('reverseImgFile').click()">
-      <input type="file" id="reverseImgFile" accept="image/*" onchange="handleReverseImageUpload(this.files[0])"/>
-      <div class="drop-icon">SEARCH</div>
-      <p><strong>Click or Drag &amp; Drop an Image to Reverse Search</strong></p>
-      <p style="margin-top:4px">Launches visual lookup &amp; platform indexing on Google Lens, Yandex, Bing, X, Pinterest, and Social Indexes</p>
+    <div class="drop-zone" onclick="document.getElementById('reverseMediaFile').click()">
+      <input type="file" id="reverseMediaFile" accept="image/*,video/*" onchange="handleReverseMediaUpload(this.files[0])"/>
+      <div class="drop-icon">MEDIA SEARCH</div>
+      <p><strong>Click or Drag &amp; Drop an Image or Video File</strong></p>
+      <p style="margin-top:4px">Supports JPG, PNG, WebP, MP4, MOV, WebM. Automatically extracts video keyframes for visual cross-network lookup on Google Lens, Yandex, Bing, X, YouTube, and Social Engines.</p>
     </div>
   </div>
   <div id="reverseResults"></div>
@@ -709,77 +709,77 @@ function switchTab(t) {
   document.getElementById('panel-' + t).classList.add('active');
 }
 
-function generatePlatformLinks(query, isImage = false, previewUrl = null) {
+function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVideo = false) {
   const q = encodeURIComponent(query);
   
   const platforms = [
     {
-      name: '𝕏 (Twitter)',
+      name: '𝕏 (Twitter / X)',
       icon: 'X',
-      desc: 'Trace tweets, retweets, bot amplification, and media posts',
+      desc: 'Trace video reposts, viral tweets, bot cascades, and commentary',
       url: `https://twitter.com/search?q=${q}&f=live`,
       btnText: 'Search on 𝕏'
     },
     {
-      name: 'Instagram',
-      icon: 'IG',
-      desc: 'Look up hashtags, captions, influencers, and profile mentions',
-      url: `https://www.google.com/search?q=site:instagram.com+${q}`,
-      btnText: 'Search Instagram'
-    },
-    {
-      name: 'Facebook',
-      icon: 'FB',
-      desc: 'Find public shares, groups, viral pages, and community posts',
-      url: `https://www.facebook.com/search/top/?q=${q}`,
-      btnText: 'Search Facebook'
-    },
-    {
-      name: 'Pinterest',
-      icon: 'PIN',
-      desc: 'Discover visual pins, creators, aesthetic boards, and re-pins',
-      url: `https://www.pinterest.com/search/pins/?q=${q}`,
-      btnText: 'Search Pinterest'
-    },
-    {
-      name: 'Snapchat',
-      icon: 'SNAP',
-      desc: 'Search public Spotlight stories, creator profiles, and lenses',
-      url: `https://www.google.com/search?q=site:snapchat.com+${q}`,
-      btnText: 'Search Snapchat'
-    },
-    {
-      name: 'Reddit',
-      icon: 'REDDIT',
-      desc: 'Check subreddits, viral threads, discussions, and provenance',
-      url: `https://www.reddit.com/search/?q=${q}&sort=new`,
-      btnText: 'Search Reddit'
-    },
-    {
       name: 'TikTok',
       icon: 'TIKTOK',
-      desc: 'Track viral sounds, challenges, video captions, and creators',
+      desc: 'Trace viral video clips, audio tracks, trends, and original creators',
       url: `https://www.tiktok.com/search?q=${q}`,
       btnText: 'Search TikTok'
     },
     {
-      name: 'Google Lens & Vision',
-      icon: 'LENS',
-      desc: 'Global visual reverse indexing and exact match detection',
-      url: isImage ? `https://lens.google.com/` : `https://www.google.com/search?tbm=isch&q=${q}`,
-      btnText: isImage ? 'Open Google Lens' : 'Google Images'
+      name: 'YouTube & Shorts',
+      icon: 'YOUTUBE',
+      desc: 'Search video titles, transcripts, Shorts, and upload history',
+      url: `https://www.youtube.com/results?search_query=${q}`,
+      btnText: 'Search YouTube'
     },
     {
-      name: 'Yandex Visual',
+      name: 'Google Lens & Vision',
+      icon: 'LENS',
+      desc: 'Reverse visual search for identical keyframes, thumbnails, and scenes',
+      url: `https://lens.google.com/`,
+      btnText: 'Open Google Lens'
+    },
+    {
+      name: 'Yandex Visual Search',
       icon: 'YANDEX',
-      desc: 'Powerful facial recognition and uncropped visual discovery',
+      desc: 'Best-in-class uncropped frame matching and actor/scene face indexing',
       url: `https://yandex.com/images/search?text=${q}`,
       btnText: 'Search Yandex'
     },
     {
+      name: 'Instagram & Reels',
+      icon: 'IG',
+      desc: 'Look up video captions, hashtags, Reels, and profile mentions',
+      url: `https://www.google.com/search?q=site:instagram.com+${q}`,
+      btnText: 'Search Instagram'
+    },
+    {
+      name: 'Facebook Watch',
+      icon: 'FB',
+      desc: 'Find public video shares, group uploads, and viral pages',
+      url: `https://www.facebook.com/search/videos/?q=${q}`,
+      btnText: 'Search Facebook'
+    },
+    {
+      name: 'Reddit Videos',
+      icon: 'REDDIT',
+      desc: 'Trace source discussions, repost subreddits, and debunking threads',
+      url: `https://www.reddit.com/search/?q=${q}&sort=new`,
+      btnText: 'Search Reddit'
+    },
+    {
+      name: 'Pinterest Video Pins',
+      icon: 'PIN',
+      desc: 'Discover video pins, aesthetic boards, and creator citations',
+      url: `https://www.pinterest.com/search/pins/?q=${q}`,
+      btnText: 'Search Pinterest'
+    },
+    {
       name: 'Bing Visual Search',
       icon: 'BING',
-      desc: 'Microsoft visual indexing and entity relationship graph',
+      desc: 'Microsoft multi-modal video and visual entity search graph',
       url: `https://www.bing.com/images/search?q=${q}`,
       btnText: 'Search Bing'
     }
@@ -819,15 +819,46 @@ function executeTextReverseSearch() {
   const query = document.getElementById('reverseQueryInput').value.trim();
   if (!query) return alert('Please enter a keyword, title, or username to search.');
   const out = document.getElementById('reverseResults');
-  out.innerHTML = generatePlatformLinks(query, false);
+  out.innerHTML = generatePlatformLinks(query, false, null, false);
 }
 
-function handleReverseImageUpload(file) {
+function handleReverseMediaUpload(file) {
   if (!file) return;
   const out = document.getElementById('reverseResults');
-  const previewUrl = URL.createObjectURL(file);
   const cleanName = file.name.replace(/\.[^/.]+$/, "");
-  out.innerHTML = generatePlatformLinks(cleanName, true, previewUrl);
+
+  if (file.type.startsWith('video/')) {
+    out.innerHTML = `<div class="loader"><div class="spinner"></div><br>Extracting video keyframe from ${file.name} for reverse search...</div>`;
+    
+    // Create hidden video element to grab frame at 1s mark
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.src = URL.createObjectURL(file);
+    video.muted = true;
+    video.playsInline = true;
+
+    video.onloadeddata = function() {
+      video.currentTime = Math.min(1.0, video.duration / 2);
+    };
+
+    video.onseeked = function() {
+      const canvas = document.createElement('canvas');
+      canvas.width = video.videoWidth || 640;
+      canvas.height = video.videoHeight || 360;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      const frameDataUrl = canvas.toDataURL('image/jpeg');
+      
+      out.innerHTML = generatePlatformLinks(cleanName, true, frameDataUrl, true);
+    };
+
+    video.onerror = function() {
+      out.innerHTML = generatePlatformLinks(cleanName, true, null, true);
+    };
+  } else {
+    const previewUrl = URL.createObjectURL(file);
+    out.innerHTML = generatePlatformLinks(cleanName, true, previewUrl, false);
+  }
 }
 
 document.getElementById('textInput').addEventListener('input', function() {
@@ -875,9 +906,9 @@ function renderResult(data, title, sub) {
     </div>
     <div class="signals-label">Multi-Signal Forensic Breakdown</div>
     <div class="signals">${sigs}</div>
-    ${title.includes('IMAGES') || title.includes('Image') ? `
+    ${title.includes('IMAGES') || title.includes('Image') || title.includes('VIDEO') || title.includes('Video') ? `
       <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
-        <span style="font-size:0.8rem; color:var(--muted);">Want to check where this image has been posted online?</span>
+        <span style="font-size:0.8rem; color:var(--muted);">Want to trace where this image or video has been posted across the web?</span>
         <button class="btn" style="margin-top:0; padding:6px 14px; font-size:0.8rem;" onclick="switchTab('reverse'); document.getElementById('reverseQueryInput').value='${sub.split('·')[0].trim()}'; executeTextReverseSearch();">Reverse Search on Social Networks &amp; Web</button>
       </div>` : ''}
   </div>`;
