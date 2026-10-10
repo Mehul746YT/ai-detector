@@ -321,7 +321,21 @@
     }
     .drop-zone.over { border-color: var(--accent); background: #1c1a08; }
     .drop-zone input { display: none; }
-    .drop-icon { font-size: 2.6rem; margin-bottom: 10px; }
+    
+    .drop-icon {
+      display: inline-block;
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      color: var(--accent);
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      padding: 4px 12px;
+      border-radius: 4px;
+      margin-bottom: 10px;
+      text-transform: uppercase;
+    }
+
     .drop-zone p { color: var(--muted); font-size: 0.85rem; }
     .drop-zone strong { color: var(--text); }
 
@@ -432,6 +446,112 @@
     }
     @keyframes spin { to { transform:rotate(360deg); } }
     .err { color: var(--red); font-size:.85rem; margin-top:8px; }
+  
+    /* ── Mobile-First Responsive Layout ── */
+    @media (max-width: 768px) {
+      body {
+        padding: 16px 12px 60px;
+      }
+      header {
+        margin-bottom: 20px;
+        padding-bottom: 18px;
+      }
+      .logo-line {
+        gap: 10px;
+      }
+      .brand-logo-img {
+        width: 42px;
+        height: 42px;
+      }
+      header h1 {
+        font-size: 1.5rem !important;
+      }
+      .logo-divider {
+        height: 30px;
+      }
+      .site-bio {
+        padding: 12px 14px;
+        font-size: 0.8rem;
+        margin: 12px auto 4px;
+      }
+      .badge-bar {
+        gap: 4px;
+        margin-top: 10px;
+      }
+      .pill {
+        font-size: 0.68rem;
+        padding: 2px 8px;
+      }
+      
+      /* Tabs scroll smoothly horizontally on phone */
+      .tabs {
+        display: flex;
+        flex-wrap: nowrap;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        gap: 6px;
+        padding-bottom: 8px;
+        margin-bottom: 16px;
+        scrollbar-width: none;
+      }
+      .tabs::-webkit-scrollbar {
+        display: none;
+      }
+      .tab {
+        flex: 0 0 auto;
+        min-width: auto;
+        font-size: 0.8rem;
+        padding: 8px 14px;
+        white-space: nowrap;
+      }
+      
+      .card {
+        padding: 16px;
+        margin-bottom: 14px;
+      }
+      .drop-zone {
+        padding: 26px 14px;
+      }
+      .drop-icon {
+        font-size: 1.1rem !important;
+        letter-spacing: 0.1em;
+        margin-bottom: 6px;
+      }
+      textarea {
+        min-height: 140px;
+        font-size: 0.88rem;
+        padding: 10px;
+      }
+      .btn {
+        width: 100%;
+        justify-content: center;
+        padding: 12px 18px;
+        font-size: 0.88rem;
+      }
+      .result-card {
+        padding: 16px;
+      }
+      .result-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+      }
+      .verdict {
+        align-self: flex-start;
+        font-size: 0.76rem;
+      }
+      .signals {
+        grid-template-columns: 1fr;
+        gap: 6px;
+      }
+      .platform-grid {
+        grid-template-columns: 1fr;
+      }
+      #reverseQueryInput {
+        font-size: 0.84rem;
+      }
+    }
+
   </style>
 </head>
 <body>
@@ -461,13 +581,13 @@
 </header>
 
 <div class="tabs">
-  <div class="tab active" onclick="switchTab('text')">📝 Text &amp; Essays</div>
-  <div class="tab" onclick="switchTab('images')">🖼️ Images &amp; Art</div>
-  <div class="tab" onclick="switchTab('reverse')">🌐 Social Reverse Search</div>
-  <div class="tab" onclick="switchTab('code')">💻 Source Code</div>
-  <div class="tab" onclick="switchTab('audio')">🎙️ Audio &amp; Voice</div>
-  <div class="tab" onclick="switchTab('video')">🎬 Video &amp; Deepfakes</div>
-  <div class="tab" onclick="switchTab('docs')">📄 Documents (PDF/Word)</div>
+  <div class="tab active" onclick="switchTab('text')">Text &amp; Essays</div>
+  <div class="tab" onclick="switchTab('images')">Images &amp; Art</div>
+  <div class="tab" onclick="switchTab('reverse')">Social Reverse Search</div>
+  <div class="tab" onclick="switchTab('code')">Source Code</div>
+  <div class="tab" onclick="switchTab('audio')">Audio &amp; Voice</div>
+  <div class="tab" onclick="switchTab('video')">Video &amp; Deepfakes</div>
+  <div class="tab" onclick="switchTab('docs')">Documents (PDF/Word)</div>
 </div>
 
 <!-- 1. TEXT PANEL -->
@@ -479,7 +599,7 @@
       <span id="textMeta">0 words</span>
       <span>RoBERTa + GPT-2 Perplexity + Cliché Fingerprints</span>
     </div>
-    <button class="btn" id="textBtn" onclick="analyzeText()">🔍 Analyze Text</button>
+    <button class="btn" id="textBtn" onclick="analyzeText()">Analyze Text</button>
   </div>
   <div id="textResults"></div>
 </div>
@@ -490,7 +610,7 @@
     <label class="card-label">Analyze Images &amp; AI Art</label>
     <div class="drop-zone" onclick="document.getElementById('imgFile').click()">
       <input type="file" id="imgFile" accept="image/*" onchange="uploadMedia(this.files[0], 'images')"/>
-      <div class="drop-icon">🖼️</div>
+      <div class="drop-icon">IMG</div>
       <p><strong>Click or Drag &amp; Drop Image</strong></p>
       <p style="margin-top:4px">JPG · PNG · WebP · TIFF · BMP (Vision Transformer + Sensor Residuals + EXIF)</p>
     </div>
@@ -508,14 +628,14 @@
 
     <div style="display:flex; gap:10px; margin-bottom:14px;">
       <input type="text" id="reverseQueryInput" placeholder="Enter keywords, headline, username, or image description..." style="flex:1; padding:11px 14px; background:var(--surface2); border:1px solid var(--border); border-radius:6px; color:var(--text); font-family:var(--font-sans); font-size:0.9rem; outline:none;" />
-      <button class="btn" style="margin-top:0;" onclick="executeTextReverseSearch()">🔎 Search All</button>
+      <button class="btn" style="margin-top:0;" onclick="executeTextReverseSearch()">Search All Platforms</button>
     </div>
 
     <div style="text-align:center; margin:16px 0; color:var(--muted); font-size:0.8rem; letter-spacing:0.05em; text-transform:uppercase;">— OR REVERSE SEARCH VIA IMAGE UPLOAD —</div>
 
     <div class="drop-zone" onclick="document.getElementById('reverseImgFile').click()">
       <input type="file" id="reverseImgFile" accept="image/*" onchange="handleReverseImageUpload(this.files[0])"/>
-      <div class="drop-icon">🔍</div>
+      <div class="drop-icon">SEARCH</div>
       <p><strong>Click or Drag &amp; Drop an Image to Reverse Search</strong></p>
       <p style="margin-top:4px">Launches visual lookup &amp; platform indexing on Google Lens, Yandex, Bing, X, Pinterest, and Social Indexes</p>
     </div>
@@ -532,7 +652,7 @@
       <span id="codeMeta">0 lines</span>
       <span>Comment style · Developer pragmatism · Indentation symmetry</span>
     </div>
-    <button class="btn" id="codeBtn" onclick="analyzeCode()">🔍 Analyze Code</button>
+    <button class="btn" id="codeBtn" onclick="analyzeCode()">Analyze Code</button>
   </div>
   <div id="codeResults"></div>
 </div>
@@ -543,7 +663,7 @@
     <label class="card-label">Analyze Audio, Speech, or Music</label>
     <div class="drop-zone" onclick="document.getElementById('audioFile').click()">
       <input type="file" id="audioFile" accept="audio/*" onchange="uploadMedia(this.files[0], 'audio')"/>
-      <div class="drop-icon">🎙️</div>
+      <div class="drop-icon">AUDIO</div>
       <p><strong>Click or Drag &amp; Drop Audio File</strong></p>
       <p style="margin-top:4px">WAV · MP3 · FLAC · OGG (Vocal Jitter + Silence Gating + Vocoder Artifacts)</p>
     </div>
@@ -557,7 +677,7 @@
     <label class="card-label">Analyze Video &amp; Deepfake Animations</label>
     <div class="drop-zone" onclick="document.getElementById('videoFile').click()">
       <input type="file" id="videoFile" accept="video/*" onchange="uploadMedia(this.files[0], 'video')"/>
-      <div class="drop-icon">🎬</div>
+      <div class="drop-icon">VIDEO</div>
       <p><strong>Click or Drag &amp; Drop Video File</strong></p>
       <p style="margin-top:4px">MP4 · MOV · AVI · WebM (Keyframe Spatial Scan + Diffusion Stream Markers)</p>
     </div>
@@ -571,7 +691,7 @@
     <label class="card-label">Analyze Uploaded Documents</label>
     <div class="drop-zone" onclick="document.getElementById('docFile').click()">
       <input type="file" id="docFile" accept=".pdf,.docx,.doc,.txt" onchange="uploadMedia(this.files[0], 'docs')"/>
-      <div class="drop-icon">📄</div>
+      <div class="drop-icon">DOC</div>
       <p><strong>Click or Drag &amp; Drop Document</strong></p>
       <p style="margin-top:4px">PDF · DOCX · Plaintext (Creator Tag Forensics + Full Linguistic Parsing)</p>
     </div>
@@ -595,70 +715,70 @@ function generatePlatformLinks(query, isImage = false, previewUrl = null) {
   const platforms = [
     {
       name: '𝕏 (Twitter)',
-      icon: '🐦',
+      icon: 'X',
       desc: 'Trace tweets, retweets, bot amplification, and media posts',
       url: `https://twitter.com/search?q=${q}&f=live`,
       btnText: 'Search on 𝕏'
     },
     {
       name: 'Instagram',
-      icon: '📸',
+      icon: 'IG',
       desc: 'Look up hashtags, captions, influencers, and profile mentions',
       url: `https://www.google.com/search?q=site:instagram.com+${q}`,
       btnText: 'Search Instagram'
     },
     {
       name: 'Facebook',
-      icon: '👥',
+      icon: 'FB',
       desc: 'Find public shares, groups, viral pages, and community posts',
       url: `https://www.facebook.com/search/top/?q=${q}`,
       btnText: 'Search Facebook'
     },
     {
       name: 'Pinterest',
-      icon: '📌',
+      icon: 'PIN',
       desc: 'Discover visual pins, creators, aesthetic boards, and re-pins',
       url: `https://www.pinterest.com/search/pins/?q=${q}`,
       btnText: 'Search Pinterest'
     },
     {
       name: 'Snapchat',
-      icon: '👻',
+      icon: 'SNAP',
       desc: 'Search public Spotlight stories, creator profiles, and lenses',
       url: `https://www.google.com/search?q=site:snapchat.com+${q}`,
       btnText: 'Search Snapchat'
     },
     {
       name: 'Reddit',
-      icon: '🤖',
+      icon: 'REDDIT',
       desc: 'Check subreddits, viral threads, discussions, and provenance',
       url: `https://www.reddit.com/search/?q=${q}&sort=new`,
       btnText: 'Search Reddit'
     },
     {
       name: 'TikTok',
-      icon: '🎵',
+      icon: 'TIKTOK',
       desc: 'Track viral sounds, challenges, video captions, and creators',
       url: `https://www.tiktok.com/search?q=${q}`,
       btnText: 'Search TikTok'
     },
     {
       name: 'Google Lens & Vision',
-      icon: '🔍',
+      icon: 'LENS',
       desc: 'Global visual reverse indexing and exact match detection',
       url: isImage ? `https://lens.google.com/` : `https://www.google.com/search?tbm=isch&q=${q}`,
       btnText: isImage ? 'Open Google Lens' : 'Google Images'
     },
     {
       name: 'Yandex Visual',
-      icon: '🌐',
+      icon: 'YANDEX',
       desc: 'Powerful facial recognition and uncropped visual discovery',
       url: `https://yandex.com/images/search?text=${q}`,
       btnText: 'Search Yandex'
     },
     {
       name: 'Bing Visual Search',
-      icon: '🔎',
+      icon: 'BING',
       desc: 'Microsoft visual indexing and entity relationship graph',
       url: `https://www.bing.com/images/search?q=${q}`,
       btnText: 'Search Bing'
@@ -758,7 +878,7 @@ function renderResult(data, title, sub) {
     ${title.includes('IMAGES') || title.includes('Image') ? `
       <div style="margin-top:16px; padding-top:14px; border-top:1px solid var(--border); display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:8px;">
         <span style="font-size:0.8rem; color:var(--muted);">Want to check where this image has been posted online?</span>
-        <button class="btn" style="margin-top:0; padding:6px 14px; font-size:0.8rem;" onclick="switchTab('reverse'); document.getElementById('reverseQueryInput').value='${sub.split('·')[0].trim()}'; executeTextReverseSearch();">🌐 Reverse Search on X, Instagram, Pinterest &amp; Web</button>
+        <button class="btn" style="margin-top:0; padding:6px 14px; font-size:0.8rem;" onclick="switchTab('reverse'); document.getElementById('reverseQueryInput').value='${sub.split('·')[0].trim()}'; executeTextReverseSearch();">Reverse Search on Social Networks &amp; Web</button>
       </div>` : ''}
   </div>`;
 }
@@ -777,9 +897,9 @@ async function analyzeText() {
       body: JSON.stringify({text})
     });
     const data = await res.json();
-    out.innerHTML = data.error ? `<div class="card err">❌ ${data.error}</div>` : renderResult(data, 'Text Analysis', `${data.word_count} words evaluated`);
+    out.innerHTML = data.error ? `<div class="card err">Error: ${data.error}</div>` : renderResult(data, 'Text Analysis', `${data.word_count} words evaluated`);
   } catch(e) {
-    out.innerHTML = `<div class="card err">❌ Server error: ${e.message}</div>`;
+    out.innerHTML = `<div class="card err">Error: Server error: ${e.message}</div>`;
   } finally { btn.disabled = false; }
 }
 
@@ -797,9 +917,9 @@ async function analyzeCode() {
       body: JSON.stringify({code})
     });
     const data = await res.json();
-    out.innerHTML = data.error ? `<div class="card err">❌ ${data.error}</div>` : renderResult(data, 'Source Code Analysis', `${data.loc} lines evaluated`);
+    out.innerHTML = data.error ? `<div class="card err">Error: ${data.error}</div>` : renderResult(data, 'Source Code Analysis', `${data.loc} lines evaluated`);
   } catch(e) {
-    out.innerHTML = `<div class="card err">❌ Server error: ${e.message}</div>`;
+    out.innerHTML = `<div class="card err">Error: Server error: ${e.message}</div>`;
   } finally { btn.disabled = false; }
 }
 
@@ -813,14 +933,14 @@ async function uploadMedia(file, category) {
     const res = await fetch('/analyze/media', { method: 'POST', body: fd });
     const data = await res.json();
     if (data.error) {
-      out.innerHTML = `<div class="card err">❌ ${data.error}</div>`;
+      out.innerHTML = `<div class="card err">Error: ${data.error}</div>`;
     } else {
       const resObj = data.result;
       const sub = `${file.name} · ${(file.size/1024).toFixed(1)} KB`;
       out.innerHTML = renderResult(resObj, `${category.toUpperCase()} Forensics`, sub);
     }
   } catch(e) {
-    out.innerHTML = `<div class="card err">❌ Media upload error: ${e.message}</div>`;
+    out.innerHTML = `<div class="card err">Error: Media upload error: ${e.message}</div>`;
   }
 }
 </script>
