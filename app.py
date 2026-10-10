@@ -11,13 +11,15 @@ Supports:
 
 import dataclasses
 import os
+import uuid
 from pathlib import Path
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, render_template, request, send_from_directory
 
-# Explicitly resolve template and static folders relative to project root
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 TEMPLATES_DIR = os.path.join(BASE_DIR, "templates")
+UPLOADS_DIR = os.path.join(BASE_DIR, "public", "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 from detector.text_detector import analyze_text
 from detector.image_detector import analyze_image
@@ -38,6 +40,11 @@ CODE_EXTS = {".py", ".js", ".ts", ".html", ".css", ".java", ".cpp", ".c", ".cs",
 
 def _serialize(obj):
     return dataclasses.asdict(obj)
+
+
+@app.route("/uploads/<filename>")
+def serve_upload(filename):
+    return send_from_directory(UPLOADS_DIR, filename)
 
 
 @app.route("/", defaults={"path": ""})
@@ -84,31 +91,43 @@ def analyze_media_route():
     ext = Path(filename).suffix.lower()
     file_bytes = f.read()
 
+    # Save to uploads directory for public URL referencing in reverse search
+    public_url = None
+    try:
+        saved_name = f"{uuid.uuid4().hex[:12]}{ext}"
+        saved_path = os.path.join(UPLOADS_DIR, saved_name)
+        with open(saved_path, "wb") as out_f:
+            out_f.write(file_bytes)
+        host = request.host_url.rstrip("/")
+        public_url = f"{host}/uploads/{saved_name}"
+    except Exception:
+        pass
+
     if ext in IMAGE_EXTS:
         result = analyze_image(file_bytes, filename)
-        return jsonify({"media_type": "image", "result": _serialize(result)})
+        return jsonify({"media_type": "image", "result": _serialize(result), "public_url": public_url})
 
     elif ext in AUDIO_EXTS:
         result = analyze_audio(file_bytes, filename)
-        return jsonify({"media_type": "audio", "result": _serialize(result)})
+        return jsonify({"media_type": "audio", "result": _serialize(result), "public_url": public_url})
 
     elif ext in VIDEO_EXTS:
         result = analyze_video(file_bytes, filename)
-        return jsonify({"media_type": "video", "result": _serialize(result)})
+        return jsonify({"media_type": "video", "result": _serialize(result), "public_url": public_url})
 
     elif ext in DOCUMENT_EXTS:
         result = analyze_document(file_bytes, filename)
-        return jsonify({"media_type": "document", "result": _serialize(result)})
+        return jsonify({"media_type": "document", "result": _serialize(result), "public_url": public_url})
 
     elif ext in CODE_EXTS:
         code_str = file_bytes.decode("utf-8", errors="replace")
         result = analyze_code(code_str, filename)
-        return jsonify({"media_type": "code", "result": _serialize(result)})
+        return jsonify({"media_type": "code", "result": _serialize(result), "public_url": public_url})
 
     else:
         try:
             result = analyze_image(file_bytes, filename)
-            return jsonify({"media_type": "image", "result": _serialize(result)})
+            return jsonify({"media_type": "image", "result": _serialize(result), "public_url": public_url})
         except Exception:
             return jsonify({"error": f"Unsupported media format '{ext}'."}), 400
 
