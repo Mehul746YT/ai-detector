@@ -79,14 +79,17 @@ def _words(text: str):
     return re.findall(r"\b[a-z']+\b", text.lower())
 
 
-def query_hf_roberta(text: str) -> Optional[dict]:
+def query_hf_roberta(text: str, hf_token: Optional[str] = None) -> Optional[dict]:
     """Queries Hugging Face serverless RoBERTa classifier if accessible."""
+    effective_token = hf_token or os.environ.get("HF_TOKEN")
+    if not effective_token:
+        return None
     try:
         url = "https://router.huggingface.co/hf-inference/models/Hello-SimpleAI/chatgpt-detector-roberta"
-        headers = {"Content-Type": "application/json"}
-        token = os.environ.get("HF_TOKEN")
-        if token:
-            headers["Authorization"] = f"Bearer {token}"
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {effective_token.strip()}"
+        }
         resp = requests.post(url, headers=headers, json={"inputs": text[:1000]}, timeout=6)
         if resp.status_code == 200:
             data = resp.json()
@@ -260,7 +263,7 @@ def analyze_ngram_repetition(text: str) -> dict:
     return {"ai_score": score, "label": label}
 
 
-def analyze_text(text: str) -> TextResult:
+def analyze_text(text: str, hf_token: Optional[str] = None) -> TextResult:
     text = text.strip()
     word_count = len(text.split())
 
@@ -273,7 +276,7 @@ def analyze_text(text: str) -> TextResult:
     signals: list[TextSignal] = []
 
     # 1. Cloud RoBERTa Classifier (if available)
-    hf_res = query_hf_roberta(text)
+    hf_res = query_hf_roberta(text, hf_token)
     if hf_res is not None:
         signals.append(TextSignal(
             name="Cloud Transformer (RoBERTa AI Classifier)",
