@@ -447,6 +447,83 @@
     @keyframes spin { to { transform:rotate(360deg); } }
     .err { color: var(--red); font-size:.85rem; margin-top:8px; }
   
+    
+    /* In-Website Verified Media & Archive Records */
+    .verified-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+      margin-top: 14px;
+    }
+    @media(max-width: 650px) {
+      .verified-grid { grid-template-columns: 1fr; }
+    }
+    .verified-card {
+      background: var(--surface2);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color .2s;
+    }
+    .verified-card:hover {
+      border-color: var(--accent);
+    }
+    .verified-card-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .verified-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      padding: 2px 7px;
+      border-radius: 3px;
+      background: #1e1805;
+      color: var(--accent);
+      border: 1px solid #4a3a10;
+      white-space: nowrap;
+    }
+    .verified-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text);
+      line-height: 1.35;
+      margin-bottom: 6px;
+    }
+    .verified-snippet {
+      font-size: 0.76rem;
+      color: var(--muted);
+      line-height: 1.45;
+      margin-bottom: 10px;
+      flex-grow: 1;
+    }
+    .verified-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: auto;
+      padding-top: 8px;
+      border-top: 1px solid rgba(255,255,255,0.05);
+      font-size: 0.72rem;
+      color: var(--muted);
+    }
+    .verified-thumb {
+      width: 100%;
+      height: 120px;
+      object-fit: cover;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      margin-bottom: 8px;
+      background: var(--surface);
+    }
+
     /* ── Mobile-First Responsive Layout ── */
     @media (max-width: 768px) {
       body {
@@ -817,22 +894,105 @@ function generatePlatformLinks(query, isVisual = false, previewUrl = null, isVid
   `;
 }
 
+
+async function runInWebsiteReverseSearch(query, previewUrl = null, isVideo = false) {
+  const container = document.getElementById('reverseResults');
+  if (!container) return;
+  
+  container.innerHTML = `
+    <div class="result-card">
+      <div class="loader">
+        <div class="spinner"></div><br>
+        Cross-referencing reverse visual database, public archives &amp; web records for "${query}" directly on this site...
+      </div>
+    </div>
+  `;
+
+  try {
+    const res = await fetch('/verify/reverse', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({query})
+    });
+    const data = await res.json();
+    const results = data.results || [];
+    
+    let verifiedHtml = '';
+    if (results.length === 0) {
+      verifiedHtml = `
+        <div style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:16px; text-align:center; margin-top:14px;">
+          <p style="font-size:0.85rem; color:var(--text); font-weight:600; margin-bottom:4px;">No Existing Match Found in Public Records</p>
+          <p style="font-size:0.78rem; color:var(--muted); line-height:1.4;">
+            This query returned zero recorded visual duplicates in public encyclopedic and archival indices. This strongly indicates high uniqueness, novel synthesis, or recent generation.
+          </p>
+        </div>
+      `;
+    } else {
+      const cards = results.map(r => `
+        <div class="verified-card">
+          <div>
+            ${r.thumbnail ? `<img src="${r.thumbnail}" class="verified-thumb" alt="${r.title}" onerror="this.style.display='none'" />` : ''}
+            <div class="verified-card-header">
+              <span class="verified-badge">${r.badge || 'VERIFIED'}</span>
+            </div>
+            <div class="verified-title">${r.title}</div>
+            <div class="verified-snippet">${r.snippet || 'Record matched in public forensic archive.'}</div>
+          </div>
+          <div class="verified-footer">
+            <span>${r.source}</span>
+            <a href="${r.url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:none; font-weight:600;">Inspect Record ↗</a>
+          </div>
+        </div>
+      `).join('');
+      verifiedHtml = `<div class="verified-grid">${cards}</div>`;
+    }
+
+    // Combine in-website verified results with the cross-platform deep queries
+    const platformMatrix = generatePlatformLinks(query, true, previewUrl, isVideo);
+
+    container.innerHTML = `
+      <div class="result-card" style="margin-bottom:18px;">
+        <div class="result-header">
+          <div style="flex:1">
+            <div class="result-title">In-Website Forensic Record Verification</div>
+            <div class="result-sub">Query: "${query}" · ${results.length} Verified Records Found Within Site</div>
+          </div>
+          <div class="verdict ${results.length > 0 ? 'verdict-human' : 'verdict-mixed'}">
+            ${results.length > 0 ? 'Recorded Matches' : 'Novel / Unindexed'}
+          </div>
+        </div>
+        ${previewUrl ? `<div style="text-align:center; margin-bottom:14px;"><img src="${previewUrl}" class="preview-thumb" alt="Asset" /></div>` : ''}
+        <p style="font-size:0.82rem; color:var(--muted); line-height:1.5;">
+          Direct verified reverse search matches retrieved instantly inside this site from global encyclopedic, photographic, and multimedia archives:
+        </p>
+        ${verifiedHtml}
+      </div>
+      ${platformMatrix}
+    `;
+
+  } catch(e) {
+    container.innerHTML = `
+      <div class="card err" style="margin-bottom:16px;">Error verifying in website: ${e.message}</div>
+      ${generatePlatformLinks(query, true, previewUrl, isVideo)}
+    `;
+  }
+}
+
+
 function executeTextReverseSearch() {
   const query = document.getElementById('reverseQueryInput').value.trim();
   if (!query) return alert('Please enter a keyword, title, or username to search.');
-  const out = document.getElementById('reverseResults');
-  out.innerHTML = generatePlatformLinks(query, false, null, false);
+  runInWebsiteReverseSearch(query, null, false);
 }
 
 function handleReverseMediaUpload(file) {
   if (!file) return;
-  const out = document.getElementById('reverseResults');
   const cleanName = file.name.replace(/\.[^/.]+$/, "");
 
   if (file.type.startsWith('video/')) {
+    const out = document.getElementById('reverseResults');
     out.innerHTML = `<div class="loader"><div class="spinner"></div><br>Extracting video keyframe from ${file.name} for reverse search...</div>`;
     
-    // Create hidden video element to grab frame at 1s mark
     const video = document.createElement('video');
     video.preload = 'metadata';
     video.src = URL.createObjectURL(file);
@@ -850,18 +1010,18 @@ function handleReverseMediaUpload(file) {
       const ctx = canvas.getContext('2d');
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const frameDataUrl = canvas.toDataURL('image/jpeg');
-      
-      out.innerHTML = generatePlatformLinks(cleanName, true, frameDataUrl, true);
+      runInWebsiteReverseSearch(cleanName, frameDataUrl, true);
     };
 
     video.onerror = function() {
-      out.innerHTML = generatePlatformLinks(cleanName, true, null, true);
+      runInWebsiteReverseSearch(cleanName, null, true);
     };
   } else {
     const previewUrl = URL.createObjectURL(file);
-    out.innerHTML = generatePlatformLinks(cleanName, true, previewUrl, false);
+    runInWebsiteReverseSearch(cleanName, previewUrl, false);
   }
 }
+
 
 document.getElementById('textInput').addEventListener('input', function() {
   const w = this.value.trim().split(/\s+/).filter(Boolean).length;
@@ -976,9 +1136,61 @@ async function uploadMedia(file, category) {
 
       let htmlOut = renderResult(resObj, `${category.toUpperCase()} Forensics`, sub);
 
-      // Automatically append reverse search matrix immediately upon image or video upload!
+      // Automatically trigger reverse search verification inside website immediately upon image or video upload!
       if (category === 'images' || category === 'video') {
-        htmlOut += `<div style="margin-top:20px;">` + generatePlatformLinks(cleanName, true, previewUrl, category === 'video', publicUrl) + `</div>`;
+        htmlOut += `<div id="${category}AutoReverse" style="margin-top:20px;"><div class="loader"><div class="spinner"></div><br>Verifying reverse search records within website...</div></div>`;
+        setTimeout(() => {
+          fetch('/verify/reverse', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({query: cleanName})
+          }).then(r => r.json()).then(data => {
+            const results = data.results || [];
+            let vHtml = '';
+            if (results.length > 0) {
+              const cards = results.map(r => `
+                <div class="verified-card">
+                  <div>
+                    ${r.thumbnail ? `<img src="${r.thumbnail}" class="verified-thumb" alt="${r.title}" onerror="this.style.display='none'" />` : ''}
+                    <div class="verified-card-header"><span class="verified-badge">${r.badge || 'VERIFIED'}</span></div>
+                    <div class="verified-title">${r.title}</div>
+                    <div class="verified-snippet">${r.snippet || ''}</div>
+                  </div>
+                  <div class="verified-footer">
+                    <span>${r.source}</span>
+                    <a href="${r.url}" target="_blank" rel="noopener noreferrer" style="color:var(--accent); text-decoration:none; font-weight:600;">Inspect Record ↗</a>
+                  </div>
+                </div>
+              `).join('');
+              vHtml = `<div class="verified-grid">${cards}</div>`;
+            } else {
+              vHtml = `<div style="background:var(--surface2); border:1px solid var(--border); border-radius:6px; padding:12px; font-size:0.8rem; color:var(--muted); margin-top:10px;">Zero matches in public records. High indicator of novel generation.</div>`;
+            }
+            const revElem = document.getElementById(category + 'AutoReverse');
+            if (revElem) {
+              revElem.innerHTML = `
+                <div class="result-card">
+                  <div class="result-header">
+                    <div style="flex:1">
+                      <div class="result-title">In-Website Forensic Record Verification</div>
+                      <div class="result-sub">${results.length} Verified Records Found In-Site for "${cleanName}"</div>
+                    </div>
+                    <div class="verdict ${results.length > 0 ? 'verdict-human' : 'verdict-mixed'}">
+                      ${results.length > 0 ? 'Recorded Matches' : 'Novel / Unindexed'}
+                    </div>
+                  </div>
+                  ${vHtml}
+                </div>
+                <div style="margin-top:16px;">${generatePlatformLinks(cleanName, true, previewUrl, category === 'video', publicUrl)}</div>
+              `;
+            }
+          }).catch(e => {
+            const revElem = document.getElementById(category + 'AutoReverse');
+            if (revElem) {
+              revElem.innerHTML = generatePlatformLinks(cleanName, true, previewUrl, category === 'video', publicUrl);
+            }
+          });
+        }, 100);
       }
 
       out.innerHTML = htmlOut;
