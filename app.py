@@ -95,7 +95,8 @@ def analyze_text_route():
     if not text:
         return jsonify({"error": "No text provided for analysis."}), 400
 
-    result = analyze_text(text)
+    hf_token = request.headers.get("X-HF-Token") or data.get("hf_token")
+    result = analyze_text(text, hf_token=hf_token)
     return jsonify(_serialize(result))
 
 
@@ -124,6 +125,11 @@ def analyze_media_route():
     ext = Path(filename).suffix.lower()
     file_bytes = f.read()
 
+    # Extract API credentials if passed by user from web UI
+    hf_token = request.headers.get("X-HF-Token") or request.form.get("hf_token")
+    sightengine_user = request.headers.get("X-Sightengine-User") or request.form.get("sightengine_user")
+    sightengine_secret = request.headers.get("X-Sightengine-Secret") or request.form.get("sightengine_secret")
+
     # Save to uploads directory for public URL referencing if needed
     public_url = None
     try:
@@ -137,7 +143,13 @@ def analyze_media_route():
         pass
 
     if ext in IMAGE_EXTS:
-        result = analyze_image(file_bytes, filename)
+        result = analyze_image(
+            file_bytes,
+            filename,
+            hf_token=hf_token,
+            sightengine_user=sightengine_user,
+            sightengine_secret=sightengine_secret
+        )
         return jsonify({"media_type": "image", "result": _serialize(result), "public_url": public_url})
 
     elif ext in AUDIO_EXTS:
@@ -159,7 +171,13 @@ def analyze_media_route():
 
     else:
         try:
-            result = analyze_image(file_bytes, filename)
+            result = analyze_image(
+                file_bytes,
+                filename,
+                hf_token=hf_token,
+                sightengine_user=sightengine_user,
+                sightengine_secret=sightengine_secret
+            )
             return jsonify({"media_type": "image", "result": _serialize(result), "public_url": public_url})
         except Exception:
             return jsonify({"error": f"Unsupported media format '{ext}'."}), 400
