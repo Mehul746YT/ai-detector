@@ -10,12 +10,14 @@ Analyzes:
 
 import io
 import math
+import os
 import struct
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
 import numpy as np
+import requests
 from PIL import Image
 
 from detector.image_detector import analyze_image, ImageResult
@@ -35,7 +37,48 @@ class VideoResult:
     verdict: str
     filename: str
     signals: list = field(default_factory=list)
+    api_used: Optional[str] = None
     error: Optional[str] = None
+
+
+def query_sightengine_video_api(
+    video_bytes: bytes,
+    api_user: str,
+    api_secret: str,
+    filename: str = "video.mp4"
+) -> Optional[dict]:
+    """
+    Queries Sightengine's dedicated synchronous video detection API (check-sync.json).
+    Evaluates generative AI videos (genai) and facial deepfakes.
+    Subject to Sightengine video plan availability and quota.
+    """
+    if not api_user or not api_secret:
+        return None
+    try:
+        url = "https://api.sightengine.com/1.0/video/check-sync.json"
+        params = {
+            "models": "genai",
+            "api_user": api_user.strip(),
+            "api_secret": api_secret.strip(),
+            "interval": "1.0"
+        }
+        # Post video stream directly
+        files = {"media": (filename, video_bytes, "video/mp4")}
+        resp = requests.post(url, files=files, data=params, timeout=25)
+        if resp.status_code == 200:
+            res_json = resp.json()
+            if res_json.get("status") == "success":
+                type_info = res_json.get("type", {})
+                ai_score = float(type_info.get("ai_generated", 0.5))
+                frames = res_json.get("frames", [])
+                frame_count = len(frames)
+                return {
+                    "ai_score": ai_score,
+                    "label": f"Sightengine Video AI Detection: {ai_score:.1%} generative probability across {frame_count} sampled intervals"
+                }
+    except Exception:
+        pass
+    return None
 
 
 _AI_VIDEO_KEYWORDS = [
@@ -193,13 +236,34 @@ def analyze_stream_entropy_and_temporal_variance(video_bytes: bytes) -> dict:
     return {"ai_score": score, "label": label}
 
 
-def analyze_video(video_bytes: bytes, filename: str) -> VideoResult:
+def analyze_video(
+    video_bytes: bytes,
+    filename: str,
+    sightengine_user: Optional[str] = None,
+    sightengine_secret: Optional[str] = None,
+) -> VideoResult:
     if len(video_bytes) < 3000:
         return VideoResult(0.5, "Error", filename, error="Video file is too small or corrupt.")
 
     signals: list[VideoSignal] = []
+    api_names = []
 
-    # 1. MP4 Box Structure & Container Forensics
+    # 1. Dedicated Sightengine Video Detection API (Subject to availability and credentials)
+    effective_se_user = sightengine_user or os.environ.get("SIGHTENGINE_API_USER")
+    effective_se_secret = sightengine_secret or os.environ.get("SIGHTENGINE_API_SECRET")
+
+    if effective_se_user and effective_se_secret:
+        se_vid = query_sightengine_video_api(video_bytes, effective_se_user, effective_se_secret, filename)
+        if se_vid is not None:
+            signals.append(VideoSignal(
+                name="Sightengine Dedicated Video GenAI Engine",
+                ai_score=round(se_vid["ai_score"], 4),
+                weight=25.0,
+                label=se_vid["label"]
+            ))
+            api_names.append("Sightengine Video API")
+
+    # 2. MP4 Box Structure & Container Forensics
     box_info = parse_mp4_boxes(video_bytes)
     if box_info["ai_tag"]:
         signals.append(VideoSignal(
@@ -316,9 +380,12 @@ def analyze_video(video_bytes: bytes, filename: str) -> VideoResult:
         else "Likely Authentic Video"
     )
 
+    api_used_summary = ", ".join(api_names) if api_names else None
+
     return VideoResult(
         final_score=round(final_score, 4),
         verdict=verdict,
         filename=filename,
         signals=signals,
+        api_used=api_used_summary,
     )
