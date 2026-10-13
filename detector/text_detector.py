@@ -79,13 +79,17 @@ def _words(text: str):
     return re.findall(r"\b[a-z']+\b", text.lower())
 
 
-def query_hf_roberta(text: str, hf_token: Optional[str] = None) -> Optional[dict]:
-    """Queries Hugging Face serverless RoBERTa classifier if accessible."""
+def query_hf_roberta(text: str, hf_token: Optional[str] = None, model_id: str = "SuperAnnotate/ai-detector") -> Optional[dict]:
+    """
+    Experimental Cloud Transformer Classifier for testing/benchmarking.
+    Hello-SimpleAI/chatgpt-detector-roberta removed from primary detection pipeline.
+    Benchmarked against newer models (e.g. SuperAnnotate/ai-detector, modern sequence classifiers).
+    """
     effective_token = hf_token or os.environ.get("HF_TOKEN")
     if not effective_token:
         return None
     try:
-        url = "https://router.huggingface.co/hf-inference/models/Hello-SimpleAI/chatgpt-detector-roberta"
+        url = f"https://router.huggingface.co/hf-inference/models/{model_id}"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {effective_token.strip()}"
@@ -98,15 +102,15 @@ def query_hf_roberta(text: str, hf_token: Optional[str] = None) -> Optional[dict
                 for item in items:
                     lbl = str(item.get("label", "")).lower()
                     score = float(item.get("score", 0.5))
-                    if any(k in lbl for k in ("chatgpt", "ai", "fake", "machine")):
+                    if any(k in lbl for k in ("chatgpt", "ai", "fake", "machine", "synthetic", "label_1")):
                         return {
                             "ai_score": score,
-                            "label": f'RoBERTa: "{item.get("label")}" ({score:.1%})'
+                            "label": f'Transformer Classifier (Testing - {model_id.split("/")[-1]}): "{item.get("label")}" ({score:.1%})'
                         }
-                    elif any(k in lbl for k in ("human", "real")):
+                    elif any(k in lbl for k in ("human", "real", "label_0")):
                         return {
                             "ai_score": 1.0 - score,
-                            "label": f'RoBERTa: "{item.get("label")}" ({score:.1%})'
+                            "label": f'Transformer Classifier (Testing - {model_id.split("/")[-1]}): "{item.get("label")}" ({score:.1%})'
                         }
     except Exception:
         pass
@@ -275,13 +279,13 @@ def analyze_text(text: str, hf_token: Optional[str] = None) -> TextResult:
 
     signals: list[TextSignal] = []
 
-    # 1. Cloud RoBERTa Classifier (if available)
+    # 1. Cloud Transformer Classifier (Testing & Benchmarking only)
     hf_res = query_hf_roberta(text, hf_token)
     if hf_res is not None:
         signals.append(TextSignal(
-            name="Cloud Transformer (RoBERTa AI Classifier)",
+            name="Cloud Transformer Classifier (Testing & Benchmarking)",
             ai_score=round(hf_res["ai_score"], 4),
-            weight=4.5,
+            weight=1.5,
             label=hf_res["label"]
         ))
 
