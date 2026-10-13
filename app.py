@@ -157,7 +157,12 @@ def analyze_media_route():
         return jsonify({"media_type": "audio", "result": _serialize(result), "public_url": public_url})
 
     elif ext in VIDEO_EXTS:
-        result = analyze_video(file_bytes, filename)
+        result = analyze_video(
+            file_bytes,
+            filename,
+            sightengine_user=sightengine_user,
+            sightengine_secret=sightengine_secret
+        )
         return jsonify({"media_type": "video", "result": _serialize(result), "public_url": public_url})
 
     elif ext in DOCUMENT_EXTS:
