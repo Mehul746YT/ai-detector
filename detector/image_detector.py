@@ -94,9 +94,10 @@ def query_sightengine_api(image_bytes: bytes, api_user: str, api_secret: str) ->
     return None
 
 
-def query_hf_vit_model(image_bytes: bytes, hf_token: str, model_id: str = "umm-maybe/AI-image-detector") -> Optional[dict]:
+def query_hf_vit_model(image_bytes: bytes, hf_token: str, model_id: str = "Organika/sdxl-detector") -> Optional[dict]:
     """
     Queries Hugging Face serverless vision transformer model.
+    Organika/sdxl-detector is maintained for testing and experimental latent diffusion validation.
     Requires Hugging Face User Access Token.
     """
     if not hf_token:
@@ -274,28 +275,17 @@ def analyze_image(
             ))
             api_names.append("Sightengine")
 
-    # 2. Hugging Face Vision Transformer API (umm-maybe/AI-image-detector)
+    # 2. Hugging Face Testing Classifier: Organika SDXL Specialist
     if effective_hf_token:
-        vit_res = query_hf_vit_model(image_bytes, effective_hf_token, "umm-maybe/AI-image-detector")
-        if vit_res is not None:
-            signals.append(ImageSignal(
-                name="Vision Transformer (ViT AI Detector)",
-                ai_score=round(vit_res["ai_score"], 4),
-                weight=20.0,
-                label=vit_res["label"]
-            ))
-            api_names.append("HuggingFace-ViT")
-
-        # Secondary SDXL Specialist Model
         sdxl_res = query_hf_vit_model(image_bytes, effective_hf_token, "Organika/sdxl-detector")
         if sdxl_res is not None:
             signals.append(ImageSignal(
-                name="SDXL Diffusion Specialist Classifier",
+                name="SDXL Diffusion Classifier (Testing)",
                 ai_score=round(sdxl_res["ai_score"], 4),
-                weight=15.0,
+                weight=12.0,
                 label=sdxl_res["label"]
             ))
-            api_names.append("HuggingFace-SDXL")
+            api_names.append("HuggingFace-SDXL (Test)")
 
     # 3. Ground Truth Metadata & Hardware Forensics
     meta = analyze_c2pa_and_metadata(img, image_bytes, filename)
